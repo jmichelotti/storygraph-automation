@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+config.py
+
+# Logs & runtime output
+logs/
+*.log
+
+# Auth / session data (VERY important)
+**/auth.json
+**/cookies.json
+**/session.json
+
+**/state/*
+
+# Local data outputs
+library.tsv
+
+# OS
+.DS_Store
+Thumbs.db
