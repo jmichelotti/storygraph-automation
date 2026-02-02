@@ -23,28 +23,88 @@ def find_matching_book(
     expected_title: str,
     expected_author: Optional[str],
 ) -> Optional[BookSearchResult]:
-    expected_title_tokens = tokens(expected_title)
+    """
+    STRICT matching:
+    - Title must share tokens
+    - Author MUST match if provided
+    - No title-only fallback when author is present
+    """
 
-    expected_author_last = None
-    if expected_author:
-        expected_author_last = normalize(expected_author).split()[-1]
+    expected_title_tokens = tokens(expected_title)
+    expected_author_tokens = tokens(expected_author) if expected_author else None
+
+    candidates: list[BookSearchResult] = []
 
     for r in results:
-        if not r.title:
+        if not r.title or not r.author:
             continue
 
         result_title_tokens = tokens(r.title)
 
+        # --- Title check ---
         if not expected_title_tokens.intersection(result_title_tokens):
             continue
 
-        if expected_author_last and r.author:
-            if expected_author_last not in normalize(r.author):
+        # --- Author check (STRICT) ---
+        if expected_author_tokens:
+            result_author_tokens = tokens(r.author)
+
+            # Require last-name equality
+            if expected_author_tokens.intersection(result_author_tokens) == set():
                 continue
 
-        return r
+        candidates.append(r)
 
-    return None
+    if not candidates:
+        print(
+            f"WARNING! No confident StoryGraph match for "
+            f"'{expected_title}' by '{expected_author}'"
+        )
+        return None
+
+    if len(candidates) > 1:
+        normalized_expected = normalize(expected_title)
+
+        # 1️⃣ Prefer exact title match
+        exact = [
+            c for c in candidates
+            if normalize(c.title) == normalized_expected
+        ]
+
+        if len(exact) == 1:
+            print(
+                f"INFO! Disambiguated by exact title match → "
+                f"{exact[0].title} by {exact[0].author}"
+            )
+            return exact[0]
+
+        # 2️⃣ Filter out previews / sneak peeks
+        filtered = [
+            c for c in candidates
+            if not any(
+                kw in normalize(c.title)
+                for kw in ("sneak peek", "preview", "excerpt", "sampler")
+            )
+        ]
+
+        if len(filtered) == 1:
+            print(
+                f"INFO! Disambiguated by excluding preview editions → "
+                f"{filtered[0].title} by {filtered[0].author}"
+            )
+            return filtered[0]
+
+        # 3️⃣ Still ambiguous → skip safely
+        print(
+            f"WARNING! Multiple StoryGraph matches for "
+            f"'{expected_title}' by '{expected_author}' — skipping"
+        )
+        for c in candidates:
+            print(f"  - {c.title} by {c.author}")
+        return None
+
+
+    return candidates[0]
 
 
 def navigate_to_book(page: Page, book: BookSearchResult) -> None:
@@ -60,7 +120,7 @@ def navigate_to_book(page: Page, book: BookSearchResult) -> None:
         timeout=30000,
     )
 
-    print("GOOD! StoryGraph preview pane loaded")
+    print(f"GOOD! StoryGraph preview pane loaded → {book.title} by {book.author}")
 
 
 def set_reading_status(page: Page, status: str) -> None:

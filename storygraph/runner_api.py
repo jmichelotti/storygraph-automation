@@ -15,6 +15,22 @@ from storygraph.flows.navigate_flow import (
 )
 from storygraph.flows.read_dates_flow import set_read_dates
 
+def normalize_author_for_search(author: str | None) -> str | None:
+    """
+    Convert Goodreads-style 'Last, First' → 'First Last'
+    Leaves already-normalized names untouched.
+    """
+    if not author:
+        return None
+
+    author = author.strip()
+
+    if "," in author:
+        last, first = [p.strip() for p in author.split(",", 1)]
+        if first and last:
+            return f"{first} {last}"
+
+    return author
 
 def update_books_progress(
     books: list[dict],
@@ -56,7 +72,9 @@ def update_books_progress(
 
         for book in books:
             title = book["title"]
-            author = book["authors"]
+            raw_author = book.get("authors") or book.get("author")
+            author = normalize_author_for_search(raw_author)
+
             percent = int(round(book["percent_complete"]))
 
             print(f"\n Updating StoryGraph: {title} -> {percent}%")
@@ -131,16 +149,25 @@ def update_books_read(
 
         for book in books:
             title = book["title"]
-            author = book.get("authors")
+            raw_author = book.get("authors") or book.get("author")
+            author = normalize_author_for_search(raw_author)
+
             date_started = book.get("date_started")
             date_finished = book.get("date_finished")
 
             print(f"\n Updating StoryGraph (READ): {title}")
 
             # 🔍 Search using existing, battle-tested helper
+            query = f"{title} {author}" if author else title
+
+            print(
+                f"SEARCH QUERY → '{query}' "
+                f"(title='{title}' author='{author}')"
+            )
+
             results = search_books(
                 page,
-                [f"{title} {author}" if author else title],
+                [query],
                 max_results_per_title=3,
             )
 

@@ -100,6 +100,19 @@ def run(
                 continue
 
             details = fetch_review_details(page, book)
+            if not details.get("author"):
+                log_line(
+                    log_file,
+                    f"WARNING! Goodreads author missing — "
+                    f"title='{details.get('title')}' review_id={book.review_id}"
+                )
+            else:
+                log_line(
+                    log_file,
+                    f"DEBUG Goodreads author OK — "
+                    f"title='{details['title']}' author='{details['author']}'"
+                )
+
             finished = details["date_read"]
 
             print(f"\n→ Processing: {details['title']}")
@@ -138,6 +151,12 @@ def run(
                 continue
 
             # ---------- NORMAL MODE ----------
+            log_line(
+                log_file,
+                f"DEBUG Passing to StoryGraph — "
+                f"title='{details['title']}' author='{details.get('author')}'"
+            )
+
             updates.append(
                 {
                     "title": details["title"],
