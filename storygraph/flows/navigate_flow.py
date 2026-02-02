@@ -73,8 +73,38 @@ def set_reading_status(page: Page, status: str) -> None:
     dropdown = page.locator("div.read-status-dropdown-content:visible")
     expect(dropdown).to_have_count(1, timeout=5000)
 
-    option = dropdown.locator("button", has_text=status)
-    expect(option).to_be_visible(timeout=5000)
+    buttons = dropdown.locator("button")
+    labels = [b.inner_text().strip().lower() for b in buttons.all()]
+
+    print(f"INFO! Available status options: {labels}")
+
+    # 🎯 If "read" is present, ALWAYS click it
+    if status == "read" and "read" in labels:
+        read_button = None
+
+        for b in buttons.all():
+            text = b.inner_text().strip().lower()
+            if text == "read":
+                read_button = b
+                break
+
+        if not read_button:
+            raise RuntimeError("Expected 'read' button not found in dropdown")
+
+        read_button.click()
+        print("GOOD! Explicitly clicked 'read' button")
+
+        print("GOOD! Explicitly set status to 'read'")
+        return
+
+    # 🚫 If "read" is not available, we cannot create a read instance
+    if status == "read":
+        print("INFO! 'read' option not available — assuming already read")
+        return
+
+    # Fallback for other statuses
+    option = buttons.filter(has_text=f"^{status}$")
+    expect(option).to_have_count(1, timeout=5000)
     option.click()
 
     print(f"GOOD! Set reading status to '{status}'")

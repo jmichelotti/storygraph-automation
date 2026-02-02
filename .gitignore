@@ -25,3 +25,6 @@ library.tsv
 # OS
 .DS_Store
 Thumbs.db
+
+profiles/
+*state*.json
