@@ -4,7 +4,7 @@ from playwright.sync_api import Page, expect
 
 def _parse_iso(d: str) -> tuple[str, str, str]:
     """
-    '2026-01-18' → ('18', '1', '2026')
+    '2026-01-18' -> ('18', '1', '2026')
     """
     y, m, d = d.split("-")
     return d.lstrip("0"), m.lstrip("0"), y
@@ -46,7 +46,7 @@ def set_read_dates(
         form.locator(
             "select[name='read_instance[start_year]']"
         ).select_option(str(d.year))
-        print(f"GOOD! Set start date → {value}")
+        print(f"GOOD! Set start date -> {value}")
 
     def set_finish(value: str):
         d = date.fromisoformat(value)
@@ -59,7 +59,7 @@ def set_read_dates(
         form.locator(
             "select[name='read_instance[year]']"
         ).select_option(str(d.year))
-        print(f"GOOD! Set finish date → {value}")
+        print(f"GOOD! Set finish date -> {value}")
 
     if start_date:
         set_start(start_date)

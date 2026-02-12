@@ -6,7 +6,7 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 
 ## ✨ Features
 
-### 📚 Goodreads → StoryGraph
+### 📚 Goodreads -> StoryGraph
 - Syncs **finished books** from Goodreads into StoryGraph
 - Automatically sets:
   - Reading status = **Read**
@@ -16,7 +16,7 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Profile-scoped state prevents duplicate uploads
 - Seed mode allows bootstrapping historical reads without touching StoryGraph
 
-### 🎧 Audible → StoryGraph
+### 🎧 Audible -> StoryGraph
 - Syncs **in-progress audiobook progress**
 - Detects:
   - New books
@@ -24,7 +24,7 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Updates StoryGraph percentage progress
 - Maintains per-profile sync state
 
-### 📖 Kindle → StoryGraph
+### 📖 Kindle -> StoryGraph
 - Designed for future extension
 
 ### 🕒 Automation-Ready
@@ -59,13 +59,13 @@ Profiles allow:
 
 ## 🚀 Usage
 
-### Goodreads → StoryGraph (Dry Run)
+### Goodreads -> StoryGraph (Dry Run)
 
 ```bash
 python -m goodreads --profile name
 ```
 
-### Goodreads → StoryGraph (Apply)
+### Goodreads -> StoryGraph (Apply)
 
 ```bash
 python -m goodreads --profile name --apply
@@ -85,7 +85,7 @@ This is useful when:
 
 ---
 
-### Audible → StoryGraph
+### Audible -> StoryGraph
 
 ```bash
 python runner.py --profile name

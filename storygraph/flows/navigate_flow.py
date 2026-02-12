@@ -73,7 +73,7 @@ def find_matching_book(
 
         if len(exact) == 1:
             print(
-                f"INFO! Disambiguated by exact title match → "
+                f"INFO! Disambiguated by exact title match -> "
                 f"{exact[0].title} by {exact[0].author}"
             )
             return exact[0]
@@ -89,12 +89,12 @@ def find_matching_book(
 
         if len(filtered) == 1:
             print(
-                f"INFO! Disambiguated by excluding preview editions → "
+                f"INFO! Disambiguated by excluding preview editions -> "
                 f"{filtered[0].title} by {filtered[0].author}"
             )
             return filtered[0]
 
-        # 3️⃣ Still ambiguous → skip safely
+        # 3️⃣ Still ambiguous -> skip safely
         print(
             f"WARNING! Multiple StoryGraph matches for "
             f"'{expected_title}' by '{expected_author}' — skipping"
@@ -120,7 +120,7 @@ def navigate_to_book(page: Page, book: BookSearchResult) -> None:
         timeout=30000,
     )
 
-    print(f"GOOD! StoryGraph preview pane loaded → {book.title} by {book.author}")
+    print(f"GOOD! StoryGraph preview pane loaded -> {book.title} by {book.author}")
 
 
 def set_reading_status(page: Page, status: str) -> None:
@@ -134,40 +134,40 @@ def set_reading_status(page: Page, status: str) -> None:
     expect(dropdown).to_have_count(1, timeout=5000)
 
     buttons = dropdown.locator("button")
-    labels = [b.inner_text().strip().lower() for b in buttons.all()]
+
+    labels = [
+        b.inner_text().strip().lower()
+        for b in buttons.all()
+    ]
 
     print(f"INFO! Available status options: {labels}")
 
     # 🎯 If "read" is present, ALWAYS click it
     if status == "read" and "read" in labels:
-        read_button = None
-
         for b in buttons.all():
-            text = b.inner_text().strip().lower()
-            if text == "read":
-                read_button = b
-                break
+            if b.inner_text().strip().lower() == "read":
+                b.click()
+                print("GOOD! Explicitly clicked 'read' button")
+                print("GOOD! Explicitly set status to 'read'")
+                return
 
-        if not read_button:
-            raise RuntimeError("Expected 'read' button not found in dropdown")
+        raise RuntimeError("Expected 'read' button not found")
 
-        read_button.click()
-        print("GOOD! Explicitly clicked 'read' button")
-
-        print("GOOD! Explicitly set status to 'read'")
-        return
-
-    # 🚫 If "read" is not available, we cannot create a read instance
+    # 🚫 If "read" is not available, assume already read
     if status == "read":
         print("INFO! 'read' option not available — assuming already read")
         return
 
-    # Fallback for other statuses
-    option = buttons.filter(has_text=f"^{status}$")
-    expect(option).to_have_count(1, timeout=5000)
-    option.click()
+    # 🎯 Other statuses (currently reading / did not finish)
+    for b in buttons.all():
+        if b.inner_text().strip().lower() == status:
+            b.click()
+            print(f"GOOD! Set reading status to '{status}'")
+            return
 
-    print(f"GOOD! Set reading status to '{status}'")
+    print(
+        f"INFO! '{status}' option not available — assuming already set"
+    )
 
 
 def update_reading_progress(

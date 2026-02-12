@@ -15,9 +15,10 @@ from storygraph.flows.navigate_flow import (
 )
 from storygraph.flows.read_dates_flow import set_read_dates
 
+
 def normalize_author_for_search(author: str | None) -> str | None:
     """
-    Convert Goodreads-style 'Last, First' → 'First Last'
+    Convert Goodreads-style 'Last, First' -> 'First Last'
     Leaves already-normalized names untouched.
     """
     if not author:
@@ -31,6 +32,7 @@ def normalize_author_for_search(author: str | None) -> str | None:
             return f"{first} {last}"
 
     return author
+
 
 def update_books_progress(
     books: list[dict],
@@ -96,6 +98,7 @@ def update_books_progress(
                 continue
 
             navigate_to_book(page, match)
+
             success = update_reading_progress(
                 page,
                 percent,
@@ -103,10 +106,26 @@ def update_books_progress(
             )
 
             if not success:
-                print(f"⏭️ Skipped progress update for '{title}'")
+                print(
+                    "INFO! Progress update failed — setting status to currently reading"
+                )
+
+                try:
+                    set_reading_status(page, "currently reading")
+                except Exception:
+                    # Status is likely already set or option is not visible
+                    pass
+
+                update_reading_progress(
+                    page,
+                    percent,
+                    progress_type="percentage",
+                )
+
 
         context.close()
         browser.close()
+
 
 def update_books_read(
     books: list[dict],
@@ -157,11 +176,10 @@ def update_books_read(
 
             print(f"\n Updating StoryGraph (READ): {title}")
 
-            # 🔍 Search using existing, battle-tested helper
             query = f"{title} {author}" if author else title
 
             print(
-                f"SEARCH QUERY → '{query}' "
+                f"SEARCH QUERY -> '{query}' "
                 f"(title='{title}' author='{author}')"
             )
 
@@ -183,10 +201,8 @@ def update_books_read(
 
             navigate_to_book(page, match)
 
-            # 📘 Set status to READ
             set_reading_status(page, "read")
 
-            # 📅 Set dates (if provided)
             set_read_dates(
                 page,
                 start_date=date_started,

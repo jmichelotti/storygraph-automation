@@ -54,7 +54,7 @@ def fetch_review_details(page, book):
 
 def extract_date(text: str) -> Optional[str]:
     """
-    Extracts 'January 11, 2026' → '2026-01-11'
+    Extracts 'January 11, 2026' -> '2026-01-11'
     """
     match = re.search(
         r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}",

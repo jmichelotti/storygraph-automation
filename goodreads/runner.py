@@ -115,7 +115,7 @@ def run(
 
             finished = details["date_read"]
 
-            print(f"\n→ Processing: {details['title']}")
+            print(f"\n-> Processing: {details['title']}")
 
             log_line(
                 log_file,
@@ -132,7 +132,7 @@ def run(
                 )
                 continue
 
-            log_line(log_file, f"→ Processing: {details['title']}")
+            log_line(log_file, f"-> Processing: {details['title']}")
 
             # ---------- SEED MODE ----------
             if seed_before:
@@ -241,7 +241,7 @@ def run(
     # ---------- Persist state ----------
     for b in updates:
         processed.add(b["review_id"])
-        log_line(log_file, f"  ACTION: applied → {b['title']}")
+        log_line(log_file, f"  ACTION: applied -> {b['title']}")
 
     state["processed_reviews"] = sorted(processed)
     save_state(profile, state)

@@ -6,7 +6,7 @@ from goodreads.runner import run
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Goodreads → StoryGraph automation"
+        description="Goodreads -> StoryGraph automation"
     )
 
     parser.add_argument(

@@ -55,7 +55,7 @@ def run():
                 added += 1
                 print(
                     f"[BOOTSTRAP] {details['title']} "
-                    f"({date_read}) → marked as processed"
+                    f"({date_read}) -> marked as processed"
                 )
 
         state["processed_reviews"] = sorted(processed)
