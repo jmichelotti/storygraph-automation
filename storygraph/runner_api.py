@@ -106,21 +106,7 @@ def update_books_progress(
             )
 
             if not success:
-                print(
-                    "INFO! Progress update failed — setting status to currently reading"
-                )
-
-                try:
-                    set_reading_status(page, "currently reading")
-                except Exception:
-                    # Status is likely already set or option is not visible
-                    pass
-
-                update_reading_progress(
-                    page,
-                    percent,
-                    progress_type="percentage",
-                )
+                print("WARNING! Progress update failed")
 
 
         context.close()
