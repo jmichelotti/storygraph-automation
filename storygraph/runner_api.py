@@ -99,6 +99,10 @@ def update_books_progress(
 
             navigate_to_book(page, match)
 
+            # Set to currently-reading before updating progress
+            # (required for new books that don't have a progress tracker yet)
+            set_reading_status(page, "currently-reading")
+
             success = update_reading_progress(
                 page,
                 percent,

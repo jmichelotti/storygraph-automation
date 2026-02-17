@@ -121,6 +121,10 @@ def navigate_to_book(page: Page, book: BookSearchResult) -> None:
 def set_reading_status(page: Page, status: str) -> None:
     """Set the reading status via dropdown."""
     status = status.lower().strip()
+    
+    # Normalize the status to match StoryGraph's format
+    # "currently-reading" -> "currently reading"
+    status = status.replace("-", " ")
 
     # Click the dropdown button
     expand_button = page.locator("button.expand-dropdown-button:visible")
@@ -142,7 +146,22 @@ def set_reading_status(page: Page, status: str) -> None:
         if b.inner_text().strip().lower() == status:
             b.click()
             print(f"GOOD! Set reading status to '{status}'")
-            page.wait_for_timeout(1000)  # Wait for status change to apply
+            
+            # Wait longer for the UI to update and progress tracker to appear
+            if status == "currently reading":
+                page.wait_for_timeout(2000)
+                # Wait for the progress tracker to be visible
+                try:
+                    page.wait_for_selector(
+                        "button.edit-progress:visible, div.progress-bar.edit-progress:visible",
+                        timeout=5000,
+                    )
+                    print("GOOD! Progress tracker is now visible")
+                except:
+                    print("INFO! Progress tracker not yet visible (may appear after first update)")
+            else:
+                page.wait_for_timeout(1000)
+            
             return
 
     # Status not available (likely already set)
@@ -160,17 +179,24 @@ def update_reading_progress(
     Returns True if successful, False otherwise.
     """
     
-    # Click the edit progress button (pencil icon or progress bar)
-    edit_button = page.locator("button.edit-progress:visible, div.progress-bar.edit-progress:visible").first
+    # First, try to find the "Track progress" button (for books with no progress yet)
+    track_button = page.locator("button.track-progress-button:visible")
     
-    if edit_button.count() == 0:
-        print("WARNING! No edit progress button found")
-        return False
-    
-    edit_button.click()
+    if track_button.count() > 0:
+        print("INFO! Found 'Track progress' button - clicking to reveal form")
+        track_button.first.click()
+        page.wait_for_timeout(1000)  # Wait for form to appear
+    else:
+        # Otherwise, look for the edit progress button (for books with existing progress)
+        edit_button = page.locator("button.edit-progress:visible, div.progress-bar.edit-progress:visible").first
+        
+        if edit_button.count() == 0:
+            print("WARNING! No track/edit progress button found")
+            return False
+        
+        edit_button.click()
     
     # Wait for the progress form to appear
-    # Use a more specific selector to get the VISIBLE form
     try:
         page.wait_for_selector(
             "div.progress-tracking-form:visible input.read-status-progress-number",
@@ -188,22 +214,24 @@ def update_reading_progress(
     minutes_input = form.locator("input.read-status-progress-minutes")
     select = form.locator("select.read-status-progress-type")
     
-    # Handle audiobook vs ebook
-    if minutes_input.is_visible() and select.count() > 0:
-        # Audiobook - switch to percentage mode
-        print("INFO! Audiobook detected — switching to percentage mode")
-        select.select_option("percentage")
-        page.wait_for_timeout(500)  # Wait for mode switch
+    # Always set progress type first if the select exists
+    if select.count() > 0:
+        # Check if this is an audiobook (minutes input is visible)
+        if minutes_input.is_visible():
+            # Audiobook - switch to percentage mode
+            print("INFO! Audiobook detected — switching to percentage mode")
+            select.select_option("percentage")
+            page.wait_for_timeout(500)  # Wait for mode switch
+        else:
+            # Ebook with type selector - set the type first
+            print(f"INFO! Ebook detected — setting progress type to '{progress_type}'")
+            select.select_option("percentage" if progress_type == "percentage" else "pages")
+            page.wait_for_timeout(500)  # Wait for type switch
     
     # Fill in the progress value
     if number_input.is_visible():
         number_input.fill("")  # Clear first
         number_input.fill(str(value))
-        
-        # Set progress type if dropdown exists
-        if select.count() > 0 and minutes_input.count() == 0:
-            # Ebook with type selector
-            select.select_option("percentage" if progress_type == "percentage" else "pages")
         
         # Click save button
         save_button = form.locator("input.progress-tracker-update-button")
