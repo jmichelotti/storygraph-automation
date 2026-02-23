@@ -45,6 +45,13 @@ class SearchPage:
         Deduplicates by (title, author, url).
         """
 
+        # Wait for at least one book pane to render — the results heading can
+        # appear before the individual book cards are in the DOM.
+        try:
+            self.page.wait_for_selector("div.book-pane-content", timeout=10000)
+        except Exception:
+            return []
+
         book_panes = self.page.locator("div.book-pane-content")
 
         results = []

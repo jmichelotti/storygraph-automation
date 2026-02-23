@@ -1,3 +1,4 @@
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from profiles.load_profile import load_profile
@@ -121,7 +122,8 @@ def update_books_read(
     books: list[dict],
     profile: str,
     headless: bool = False,
-) -> None:
+    log_file: Path | None = None,
+) -> set[str]:
     """
     Mark books as READ on StoryGraph and set start / finish dates.
 
@@ -131,6 +133,13 @@ def update_books_read(
       - date_started (YYYY-MM-DD | None)
       - date_finished (YYYY-MM-DD)
     """
+    def _log(msg: str = "") -> None:
+        if log_file:
+            with log_file.open("a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+
+    applied: set[str] = set()
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
 
@@ -168,6 +177,10 @@ def update_books_read(
 
             query = f"{title} {author}" if author else title
 
+            _log(
+                f"SG SEARCH -> '{query}' "
+                f"(raw author: '{raw_author}' -> normalized: '{author}')"
+            )
             print(
                 f"SEARCH QUERY -> '{query}' "
                 f"(title='{title}' author='{author}')"
@@ -179,15 +192,41 @@ def update_books_read(
                 max_results_per_title=3,
             )
 
+            _log(f"SG RESULTS -> {len(results)} result(s): "
+                 + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
+
             match = find_matching_book(
                 results,
                 expected_title=title,
                 expected_author=author,
             )
 
+            # Fallback: StoryGraph truncates searches at '&', returning unrelated
+            # results. If no match was found and the query contains '&', retry
+            # with 'and' before giving up.
+            if not match and "&" in query:
+                fallback_query = query.replace("&", "and")
+                _log(f"SG SEARCH FALLBACK (& -> and) -> '{fallback_query}'")
+                print(f"RETRY SEARCH (& -> and) -> '{fallback_query}'")
+                results = search_books(
+                    page,
+                    [fallback_query],
+                    max_results_per_title=3,
+                )
+                _log(f"SG FALLBACK RESULTS -> {len(results)} result(s): "
+                     + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
+                match = find_matching_book(
+                    results,
+                    expected_title=title,
+                    expected_author=author,
+                )
+
             if not match:
+                _log(f"WARNING! No StoryGraph match for '{title}' by '{author}'")
                 print(f"WARNING! No exact StoryGraph match found for '{title}'")
                 continue
+
+            _log(f"SG MATCH -> '{match.title}' by '{match.author}' @ {match.url}")
 
             navigate_to_book(page, match)
 
@@ -200,6 +239,10 @@ def update_books_read(
             )
 
             print("GOOD! Book marked as read with dates")
+            _log(f"GOOD! Marked as read: '{title}' (start={date_started}, finish={date_finished})")
+            applied.add(book["review_id"])
 
         context.close()
         browser.close()
+
+    return applied

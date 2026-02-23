@@ -67,6 +67,7 @@ def set_read_dates(
     if finish_date:
         set_finish(finish_date)
 
-    # Save
+    # Save — wait for the POST to complete before the browser is closed
     form.locator("input[type='submit'][value='Update']").click()
+    page.wait_for_load_state("load")
     print("GOOD! Saved read dates")

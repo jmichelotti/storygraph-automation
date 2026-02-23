@@ -232,16 +232,20 @@ def run(
     log_line(log_file)
     log_line(log_file, "Applying updates to StoryGraph...")
 
-    update_books_read(
+    applied_ids = update_books_read(
         books=updates,
         profile=profile,
         headless=headless,
+        log_file=log_file,
     )
 
     # ---------- Persist state ----------
     for b in updates:
-        processed.add(b["review_id"])
-        log_line(log_file, f"  ACTION: applied -> {b['title']}")
+        if b["review_id"] in applied_ids:
+            processed.add(b["review_id"])
+            log_line(log_file, f"  ACTION: applied -> {b['title']}")
+        else:
+            log_line(log_file, f"  WARNING: skipped (no StoryGraph match) -> {b['title']}")
 
     state["processed_reviews"] = sorted(processed)
     save_state(profile, state)
