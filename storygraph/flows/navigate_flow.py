@@ -90,7 +90,25 @@ def find_matching_book(
             )
             return filtered[0]
 
-        # 3️⃣ Still ambiguous -> skip safely
+        # 3️⃣ Filter out multi-book bundles / sets
+        bundle_keywords = (
+            "book set", "box set", "duology", "trilogy", "omnibus",
+            "2 book", "3 book", "collection", "bundle", "complete series",
+        )
+        source = filtered if filtered else candidates
+        no_bundles = [
+            c for c in source
+            if not any(kw in normalize(c.title) for kw in bundle_keywords)
+        ]
+
+        if len(no_bundles) == 1:
+            print(
+                f"INFO! Disambiguated by excluding bundles/sets -> "
+                f"{no_bundles[0].title} by {no_bundles[0].author}"
+            )
+            return no_bundles[0]
+
+        # 4️⃣ Still ambiguous -> skip safely
         print(
             f"WARNING! Multiple StoryGraph matches for "
             f"'{expected_title}' by '{expected_author}' — skipping"
