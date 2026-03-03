@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -220,6 +221,28 @@ def update_books_read(
                     expected_title=title,
                     expected_author=author,
                 )
+
+            # Fallback: StoryGraph truncates searches at ',' so titles with
+            # parentheticals like "(The Selvaren, #1)" return no results.
+            # Strip the parenthetical and retry with just the base title.
+            if not match and re.search(r'\(', title):
+                stripped_title = re.sub(r'\s*\([^)]*\)', '', title).strip()
+                if stripped_title and stripped_title != title:
+                    fallback_query = f"{stripped_title} {author}" if author else stripped_title
+                    _log(f"SG SEARCH FALLBACK (strip parens) -> '{fallback_query}'")
+                    print(f"RETRY SEARCH (strip parens) -> '{fallback_query}'")
+                    results = search_books(
+                        page,
+                        [fallback_query],
+                        max_results_per_title=3,
+                    )
+                    _log(f"SG FALLBACK RESULTS (strip parens) -> {len(results)} result(s): "
+                         + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
+                    match = find_matching_book(
+                        results,
+                        expected_title=title,
+                        expected_author=author,
+                    )
 
             if not match:
                 _log(f"WARNING! No StoryGraph match for '{title}' by '{author}'")

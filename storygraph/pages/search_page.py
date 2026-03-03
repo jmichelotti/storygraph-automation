@@ -10,6 +10,9 @@ class SearchPage:
         # Anchor that confirms the results UI is present
         self.results_heading = "#search-results-for"
 
+        # Paragraph shown when search returns no matches at all
+        self.no_results_message = "p.mt-8"
+
         # Book link patterns
         # - good: /books/<uuid>
         # - bad: /books/<uuid>/editions, /books/new
@@ -30,14 +33,19 @@ class SearchPage:
         self.page.fill(self.search_input, query)
         self.page.press(self.search_input, "Enter")
 
-        # GOOD! Wait for the *actual* “Search results for 'query'” heading
-        self.page.wait_for_selector(self.results_heading, timeout=20000)
+        # Wait for either the results heading OR the "no results" paragraph.
+        # When StoryGraph finds nothing it shows p.mt-8 instead of #search-results-for,
+        # so waiting only for the heading would time out (20 s) on zero-result searches.
+        self.page.wait_for_selector(
+            f"{self.results_heading}, {self.no_results_message}",
+            timeout=20000,
+        )
 
-        # Optional extra safety: make sure it contains “Search results for”
-        # (Prevents false positives if the element exists but results didn’t refresh)
-        heading_text = self.page.locator(self.results_heading).inner_text().lower()
-        if "search results for" not in heading_text:
-            raise RuntimeError(f"Results heading didn't look right: {heading_text}")
+        # Only validate the heading if it actually appeared (it won't on no-results pages)
+        if self.page.locator(self.results_heading).count() > 0:
+            heading_text = self.page.locator(self.results_heading).inner_text().lower()
+            if "search results for" not in heading_text:
+                raise RuntimeError(f"Results heading didn't look right: {heading_text}")
 
     def get_top_results(self, max_results: int = 3):
         """
@@ -96,5 +104,3 @@ class SearchPage:
                 break
 
         return results
-
-
