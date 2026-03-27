@@ -82,11 +82,12 @@ class SearchPage:
 
             url = f"https://app.thestorygraph.com{href}"
 
-            # --- Author ---
+            # --- Author (join all listed authors) ---
             author = None
-            author_link = pane.locator('h3 a[href^="/authors/"]')
-            if author_link.count() > 0:
-                author = author_link.first.inner_text().strip()
+            author_links = pane.locator('h3 a[href^="/authors/"]')
+            if author_links.count() > 0:
+                names = [a.inner_text().strip() for a in author_links.all()]
+                author = ", ".join(names)
 
             key = (title, author, url)
             if key in seen:
