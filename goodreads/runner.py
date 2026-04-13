@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
-import argparse
 from datetime import date, datetime
 import time
 
@@ -87,93 +86,94 @@ def run(
             profile=profile,
             headless=headless,
         )
-        page = context.new_page()
+        try:
+            page = context.new_page()
 
-        ensure_logged_in(page, context, profile=profile)
+            ensure_logged_in(page, context, profile=profile)
 
-        goodreads_books = fetch_read_books(page)
-        print(f"Found {len(goodreads_books)} read books")
-        log_line(log_file, f"Found {len(goodreads_books)} read books")
+            goodreads_books = fetch_read_books(page)
+            print(f"Found {len(goodreads_books)} read books")
+            log_line(log_file, f"Found {len(goodreads_books)} read books")
 
-        for book in goodreads_books:
-            if book.review_id in processed:
-                continue
-
-            details = fetch_review_details(page, book)
-            if not details.get("author"):
-                log_line(
-                    log_file,
-                    f"WARNING! Goodreads author missing — "
-                    f"title='{details.get('title')}' review_id={book.review_id}"
-                )
-            else:
-                log_line(
-                    log_file,
-                    f"DEBUG Goodreads author OK — "
-                    f"title='{details['title']}' author='{details['author']}'"
-                )
-
-            finished = details["date_read"]
-
-            print(f"\n-> Processing: {details['title']}")
-
-            log_line(
-                log_file,
-                f"BOOK: {details['title']} | "
-                f"start={details['date_started']} | "
-                f"finish={details['date_read']}",
-            )
-
-            # Skip if Goodreads failed to provide dates
-            if not details["date_started"] and not details["date_read"]:
-                log_line(
-                    log_file,
-                    f"SKIP — no dates found: {details['title']}",
-                )
-                continue
-
-            log_line(log_file, f"-> Processing: {details['title']}")
-
-            # ---------- SEED MODE ----------
-            if seed_before:
-                if not finished:
-                    log_line(log_file, "  Skipped (no finish date)")
+            for book in goodreads_books:
+                if book.review_id in processed:
                     continue
 
-                finished_date = date.fromisoformat(finished)
-                if finished_date < seed_before:
-                    processed.add(book.review_id)
-                    newly_seeded += 1
+                details = fetch_review_details(page, book)
+                if not details.get("author"):
                     log_line(
                         log_file,
-                        f"  ACTION: seeded (finished {finished})",
+                        f"WARNING! Goodreads author missing — "
+                        f"title='{details.get('title')}' review_id={book.review_id}"
                     )
-                continue
+                else:
+                    log_line(
+                        log_file,
+                        f"DEBUG Goodreads author OK — "
+                        f"title='{details['title']}' author='{details['author']}'"
+                    )
 
-            # ---------- NORMAL MODE ----------
-            log_line(
-                log_file,
-                f"DEBUG Passing to StoryGraph — "
-                f"title='{details['title']}' author='{details.get('author')}'"
-            )
+                finished = details["date_read"]
 
-            updates.append(
-                {
-                    "title": details["title"],
-                    "author": details["author"],
-                    "date_started": details["date_started"],
-                    "date_finished": finished,
-                    "review_id": book.review_id,
-                }
-            )
+                print(f"\n-> Processing: {details['title']}")
 
-            log_line(
-                log_file,
-                f"  start={details['date_started']} finish={finished}",
-            )
+                log_line(
+                    log_file,
+                    f"BOOK: {details['title']} | "
+                    f"start={details['date_started']} | "
+                    f"finish={details['date_read']}",
+                )
 
-        context.close()
-        browser.close()
+                # Skip if Goodreads failed to provide dates
+                if not details["date_started"] and not details["date_read"]:
+                    log_line(
+                        log_file,
+                        f"SKIP — no dates found: {details['title']}",
+                    )
+                    continue
+
+                log_line(log_file, f"-> Processing: {details['title']}")
+
+                # ---------- SEED MODE ----------
+                if seed_before:
+                    if not finished:
+                        log_line(log_file, "  Skipped (no finish date)")
+                        continue
+
+                    finished_date = date.fromisoformat(finished)
+                    if finished_date < seed_before:
+                        processed.add(book.review_id)
+                        newly_seeded += 1
+                        log_line(
+                            log_file,
+                            f"  ACTION: seeded (finished {finished})",
+                        )
+                    continue
+
+                # ---------- NORMAL MODE ----------
+                log_line(
+                    log_file,
+                    f"DEBUG Passing to StoryGraph — "
+                    f"title='{details['title']}' author='{details.get('author')}'"
+                )
+
+                updates.append(
+                    {
+                        "title": details["title"],
+                        "author": details["author"],
+                        "date_started": details["date_started"],
+                        "date_finished": finished,
+                        "review_id": book.review_id,
+                    }
+                )
+
+                log_line(
+                    log_file,
+                    f"  start={details['date_started']} finish={finished}",
+                )
+        finally:
+            context.close()
+            browser.close()
 
     # ---------- SEED-ONLY EXIT ----------
     if seed_before:
@@ -257,49 +257,3 @@ def run(
     duration = time.time() - start_ts
     log_line(log_file, f"RUN END — duration: {duration:.1f}s")
     log_line(log_file)
-
-
-# ---------- CLI ----------
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Sync Goodreads read books to StoryGraph"
-    )
-
-    parser.add_argument(
-        "--profile",
-        required=True,
-        help="Profile name (matches profiles/{profile}.json)",
-    )
-
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Apply changes to StoryGraph (default is dry-run)",
-    )
-
-    parser.add_argument(
-        "--seed-before",
-        help="Seed state with all books finished before YYYY-MM-DD",
-    )
-
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run browser in headless mode",
-    )
-
-    args = parser.parse_args()
-
-    seed_date = (
-        date.fromisoformat(args.seed_before)
-        if args.seed_before
-        else None
-    )
-
-    run(
-        profile=args.profile,
-        headless=args.headless,
-        dry_run=not args.apply,
-        seed_before=seed_date,
-    )

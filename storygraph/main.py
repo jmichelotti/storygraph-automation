@@ -4,7 +4,7 @@ from typing import List
 
 from playwright.sync_api import sync_playwright
 
-from storygraph import config
+from profiles.load_profile import load_profile
 from storygraph.flows import ensure_logged_in, search_books
 from storygraph.flows.navigate_flow import find_matching_book, navigate_to_book, set_reading_status, update_reading_progress
 
@@ -20,7 +20,8 @@ def parse_args():
     p.add_argument(
         "--profile",
         type=str,
-        help="Optional browser profile name (e.g. justin). Enables session persistence.",
+        required=True,
+        help="Profile name (e.g. justin). Used for credentials and session persistence.",
     )
 
     progress = p.add_mutually_exclusive_group()
@@ -75,12 +76,6 @@ def main():
         if not (0 <= args.percent <= 100):
             raise ValueError("--percent must be between 0 and 100")
 
-    if not config.STORYGRAPH_EMAIL or not config.STORYGRAPH_PASSWORD:
-        raise RuntimeError(
-            "Missing STORYGRAPH_EMAIL or STORYGRAPH_PASSWORD environment variables. "
-            "Set them and restart your terminal."
-        )
-
     titles = load_titles(args)
     if not titles:
         raise RuntimeError("No titles provided. Use --title, --titles, or --file.")
@@ -90,6 +85,8 @@ def main():
     if author:
         titles = [f"{title} {author}" for title in titles]
 
+    creds = load_profile(args.profile)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=args.headless)
         storage_state_path = get_storage_state_path(args.profile)
@@ -98,11 +95,11 @@ def main():
             print(f" Using existing browser state: {storage_state_path.name}")
             context = browser.new_context(storage_state=storage_state_path)
         else:
-            print("🆕 Starting new browser session")
+            print("Starting new browser session")
             context = browser.new_context()
         page = context.new_page()
 
-        ensure_logged_in(page, config.STORYGRAPH_EMAIL, config.STORYGRAPH_PASSWORD)
+        ensure_logged_in(page, creds["storygraph_email"], creds["storygraph_password"])
 
         if storage_state_path:
             print(f" Saving browser state to {storage_state_path.name}")

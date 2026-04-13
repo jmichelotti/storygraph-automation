@@ -2,14 +2,6 @@ from datetime import date
 from playwright.sync_api import Page, expect
 
 
-def _parse_iso(d: str) -> tuple[str, str, str]:
-    """
-    '2026-01-18' -> ('18', '1', '2026')
-    """
-    y, m, d = d.split("-")
-    return d.lstrip("0"), m.lstrip("0"), y
-
-
 def set_read_dates(
     page: Page,
     start_date: str | None,

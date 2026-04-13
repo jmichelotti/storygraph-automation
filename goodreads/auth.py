@@ -1,20 +1,15 @@
 from pathlib import Path
-import json
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from goodreads.config import GOODREADS_BASE_URL
+from profiles.load_profile import load_profile
 
 GOODREADS_LOGIN = f"{GOODREADS_BASE_URL}/user/sign_in"
 
 
 def get_state_file(profile: str) -> Path:
-    return Path(f".goodreads_state_{profile}.json")
-
-
-def load_profile(profile: str) -> dict:
-    path = Path("profiles") / f"{profile}.json"
-    if not path.exists():
-        raise RuntimeError(f"Profile not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    state_dir = Path("goodreads/state")
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir / f".goodreads_state_{profile}.json"
 
 
 def get_browser(playwright, profile: str, headless=False):

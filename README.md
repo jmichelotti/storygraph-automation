@@ -24,9 +24,6 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Updates StoryGraph percentage progress
 - Maintains per-profile sync state
 
-### 📖 Kindle -> StoryGraph
-- Designed for future extension
-
 ### 🕒 Automation-Ready
 - Safe for **headless execution**
 - Robust against partial failures (timeouts, missing data)

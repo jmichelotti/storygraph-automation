@@ -1,4 +1,5 @@
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -7,14 +8,10 @@ from storygraph.flows import ensure_logged_in, search_books
 from storygraph.flows.navigate_flow import (
     find_matching_book,
     navigate_to_book,
+    set_reading_status,
     update_reading_progress,
 )
 from storygraph.main import get_storage_state_path
-from datetime import date
-
-from storygraph.flows.navigate_flow import (
-    set_reading_status,
-)
 from storygraph.flows.read_dates_flow import set_read_dates
 
 
@@ -36,6 +33,42 @@ def normalize_author_for_search(author: str | None) -> str | None:
     return author
 
 
+@contextmanager
+def storygraph_session(profile: str, headless: bool = False):
+    """
+    Launch a Playwright browser, log into StoryGraph, and yield the page.
+    Saves session state and closes the browser on exit (even on error).
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        storage_state_path = get_storage_state_path(profile)
+
+        if storage_state_path and storage_state_path.exists():
+            print(f" Using StoryGraph browser state: {storage_state_path.name}")
+            context = browser.new_context(storage_state=storage_state_path)
+        else:
+            print("Starting new StoryGraph browser session")
+            context = browser.new_context()
+
+        page = context.new_page()
+        creds = load_profile(profile)
+
+        ensure_logged_in(
+            page,
+            creds["storygraph_email"],
+            creds["storygraph_password"],
+        )
+
+        if storage_state_path:
+            context.storage_state(path=storage_state_path)
+
+        try:
+            yield page
+        finally:
+            context.close()
+            browser.close()
+
+
 def update_books_progress(
     books: list[dict],
     profile: str,
@@ -49,31 +82,7 @@ def update_books_progress(
       - authors
       - percent_complete
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-
-        storage_state_path = get_storage_state_path(profile)
-
-        if storage_state_path and storage_state_path.exists():
-            print(f" Using StoryGraph browser state: {storage_state_path.name}")
-            context = browser.new_context(storage_state=storage_state_path)
-        else:
-            print("🆕 Starting new StoryGraph browser session")
-            context = browser.new_context()
-
-        page = context.new_page()
-
-        creds = load_profile(profile)
-
-        ensure_logged_in(
-            page,
-            creds["storygraph_email"],
-            creds["storygraph_password"],
-        )
-
-        if storage_state_path:
-            context.storage_state(path=storage_state_path)
-
+    with storygraph_session(profile, headless) as page:
         for book in books:
             title = book["title"]
             raw_author = book.get("authors") or book.get("author")
@@ -115,10 +124,6 @@ def update_books_progress(
                 print("WARNING! Progress update failed")
 
 
-        context.close()
-        browser.close()
-
-
 def update_books_read(
     books: list[dict],
     profile: str,
@@ -141,31 +146,7 @@ def update_books_read(
 
     applied: set[str] = set()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
-
-        storage_state_path = get_storage_state_path(profile)
-
-        if storage_state_path and storage_state_path.exists():
-            print(f" Using StoryGraph browser state: {storage_state_path.name}")
-            context = browser.new_context(storage_state=storage_state_path)
-        else:
-            print("🆕 Starting new StoryGraph browser session")
-            context = browser.new_context()
-
-        page = context.new_page()
-
-        creds = load_profile(profile)
-
-        ensure_logged_in(
-            page,
-            creds["storygraph_email"],
-            creds["storygraph_password"],
-        )
-
-        if storage_state_path:
-            context.storage_state(path=storage_state_path)
-
+    with storygraph_session(profile, headless) as page:
         for book in books:
             title = book["title"]
             raw_author = book.get("authors") or book.get("author")
@@ -264,8 +245,5 @@ def update_books_read(
             print("GOOD! Book marked as read with dates")
             _log(f"GOOD! Marked as read: '{title}' (start={date_started}, finish={date_finished})")
             applied.add(book["review_id"])
-
-        context.close()
-        browser.close()
 
     return applied

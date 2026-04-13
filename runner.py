@@ -2,6 +2,7 @@ import argparse
 import json
 from pathlib import Path
 from datetime import datetime, UTC
+import time
 
 from storygraph.runner_api import update_books_progress
 from audible.audible_in_progress import export_library, get_in_progress_books
@@ -17,6 +18,19 @@ def parse_args():
         help="StoryGraph profile name (used for sync state)",
     )
     return parser.parse_args()
+
+
+# ---------- Logging helpers ----------
+
+def get_log_path(profile: str) -> Path:
+    log_dir = Path("logs/runner")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / f"{profile}.log"
+
+
+def log_line(log_file: Path, message: str = ""):
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(message + "\n")
 
 
 def get_sync_state_path(profile: str) -> Path:
@@ -116,6 +130,15 @@ def main():
     args = parse_args()
     profile = args.profile
 
+    log_file = get_log_path(profile)
+    start_ts = time.time()
+
+    log_line(log_file, "=" * 60)
+    log_line(log_file, f"RUN START — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log_line(log_file, f"Profile: {profile}")
+    log_line(log_file, "=" * 60)
+    log_line(log_file)
+
     sync_state_path = get_sync_state_path(profile)
     sync_state = load_sync_state(sync_state_path)
 
@@ -129,11 +152,22 @@ def main():
 
     print_diff(updates, unchanged)
 
+    for book in updates:
+        if book["reason"] == "new":
+            log_line(log_file, f"UPDATE (new): {book['title']} -> {book['percent_complete']}%")
+        else:
+            log_line(log_file, f"UPDATE (changed): {book['title']} -> {book['previous_percent']}% -> {book['percent_complete']}%")
+
     if not updates:
         print("GOOD! Nothing to update in StoryGraph.")
+        log_line(log_file, "No updates needed.")
+        log_line(log_file, f"RUN END — duration: {time.time() - start_ts:.1f}s")
+        log_line(log_file)
         return
 
     print("\n Applying updates to StoryGraph...\n")
+    log_line(log_file, "Applying updates to StoryGraph...")
+
     update_books_progress(
         books=updates,
         profile=profile,
@@ -143,6 +177,10 @@ def main():
     print("\n Saving sync state...")
     save_sync_state(sync_state_path, audible_books)
     print("GOOD! Sync state saved")
+    log_line(log_file, "GOOD! Sync state saved")
+
+    log_line(log_file, f"RUN END — duration: {time.time() - start_ts:.1f}s")
+    log_line(log_file)
 
 if __name__ == "__main__":
     main()

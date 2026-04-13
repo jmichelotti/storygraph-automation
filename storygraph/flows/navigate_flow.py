@@ -298,5 +298,5 @@ def get_current_progress_percentage(page: Page) -> int | None:
         raw = progress_text.inner_text().strip()
         return int(raw.replace("%", ""))
 
-    except Exception:
+    except (TimeoutError, ValueError):
         return None

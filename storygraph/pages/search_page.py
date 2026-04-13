@@ -1,4 +1,4 @@
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError
 
 class SearchPage:
     def __init__(self, page: Page):
@@ -57,7 +57,7 @@ class SearchPage:
         # appear before the individual book cards are in the DOM.
         try:
             self.page.wait_for_selector("div.book-pane-content", timeout=10000)
-        except Exception:
+        except TimeoutError:
             return []
 
         book_panes = self.page.locator("div.book-pane-content")
