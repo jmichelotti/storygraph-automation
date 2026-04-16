@@ -1,0 +1,68 @@
+services:
+  dashboard:
+    build: .
+    init: true
+    command: uvicorn dashboard.app:app --host 0.0.0.0 --port 1200
+    ports:
+      - "127.0.0.1:1200:1200"
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs:ro
+      - ./goodreads/state:/app/goodreads/state:ro
+      - ./storygraph/state:/app/storygraph/state:ro
+      - ./dashboard/schedules.yml:/app/dashboard/schedules.yml:ro
+
+  goodreads-kim:
+    build: .
+    init: true
+    command: python -m goodreads --profile kim --apply
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./logs:/app/logs
+      - ./goodreads/state:/app/goodreads/state
+      - ./storygraph/state:/app/storygraph/state
+
+  audible-justin:
+    build: .
+    init: true
+    command: python runner.py --profile justin
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./logs:/app/logs
+      - ./goodreads/state:/app/goodreads/state
+      - ./storygraph/state:/app/storygraph/state
+      - ./audible-config:/audible-config
+    environment:
+      AUDIBLE_CONFIG_DIR: /audible-config
+
+  goodreads-kim-mfa:
+    build: .
+    init: true
+    command: python -m goodreads --profile kim --apply
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./logs:/app/logs
+      - ./goodreads/state:/app/goodreads/state
+      - ./storygraph/state:/app/storygraph/state
+    environment:
+      ENABLE_VNC: "1"
+    ports:
+      - "127.0.0.1:6080:6080"
+    profiles: ["mfa"]
+
+  audible-justin-mfa:
+    build: .
+    init: true
+    command: python runner.py --profile justin
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./logs:/app/logs
+      - ./goodreads/state:/app/goodreads/state
+      - ./storygraph/state:/app/storygraph/state
+      - ./audible-config:/audible-config
+    environment:
+      ENABLE_VNC: "1"
+      AUDIBLE_CONFIG_DIR: /audible-config
+    ports:
+      - "127.0.0.1:6080:6080"
+    profiles: ["mfa"]

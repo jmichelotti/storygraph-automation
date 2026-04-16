@@ -1,0 +1,26 @@
+# Credentials and state — always bind-mounted at runtime, never baked into image
+profiles/
+logs/
+goodreads/state/
+storygraph/state/
+audible-config/
+library.tsv
+
+# VCS / editor / local
+.git/
+.gitignore
+.claude/
+.venv/
+venv/
+.env
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS
+.DS_Store
+Thumbs.db

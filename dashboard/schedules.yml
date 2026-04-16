@@ -1,0 +1,7 @@
+profiles:
+  kim:
+    cron: "0 * * * *"
+    description: "Every hour, on the hour"
+  justin:
+    cron: "55 11,23 * * *"
+    description: "11:55 AM and 11:55 PM daily"

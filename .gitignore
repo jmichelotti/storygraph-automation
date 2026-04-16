@@ -28,3 +28,9 @@ Thumbs.db
 
 profiles/
 *state*.json
+
+# Docker runtime data (auth credentials)
+audible-config/
+
+# Temporary venvs
+.venv*/

@@ -54,7 +54,44 @@ Profiles allow:
 
 ---
 
-## 🚀 Usage
+## 🐳 Docker Setup (Recommended)
+
+Everything runs in Docker containers via `docker-compose.yml`.
+
+### First-time setup
+
+```bash
+docker compose build
+cp -r "$LOCALAPPDATA/Audible/." audible-config/   # copy Audible CLI auth
+docker compose up -d dashboard                      # start status API on port 1200
+```
+
+### Scheduled runs
+
+Triggered by Windows Task Scheduler (or cron):
+```bash
+docker compose run --rm goodreads-kim      # Goodreads -> StoryGraph (Kim)
+docker compose run --rm audible-justin     # Audible -> StoryGraph (Justin)
+```
+
+### Status dashboard
+
+```bash
+curl http://localhost:1200/status    # JSON: last run, next run, per-profile state
+curl http://localhost:1200/healthz   # health check
+```
+
+### MFA recovery
+
+If a run hangs on CAPTCHA/MFA, use the VNC-enabled variant:
+```bash
+docker compose --profile mfa run --rm --service-ports goodreads-kim-mfa
+# Open http://localhost:6080/vnc.html to interact with the browser
+```
+
+---
+
+## 🚀 Local Usage (without Docker)
 
 ### Goodreads -> StoryGraph (Dry Run)
 
@@ -122,9 +159,9 @@ Designed for long-running scheduled automation.
 
 - Retry logic for transient failures
 - Email / Discord notifications
-- Configurable schedules
+- ~~Configurable schedules~~ ✅ via `dashboard/schedules.yml`
 - CSV / JSON export modes
-- Unified dashboard view
+- ~~Unified dashboard view~~ ✅ via `GET /status` on port 1200
 
 ---
 
