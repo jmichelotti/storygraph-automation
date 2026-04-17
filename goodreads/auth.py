@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from goodreads.config import GOODREADS_BASE_URL
@@ -24,13 +25,25 @@ def get_browser(playwright, profile: str, headless=False):
     return browser, context
 
 
+def _goto_with_retry(page, url, retries=3, wait_until="domcontentloaded", timeout=60_000):
+    for attempt in range(retries):
+        try:
+            page.goto(url, wait_until=wait_until, timeout=timeout)
+            return
+        except PlaywrightTimeoutError:
+            if attempt == retries - 1:
+                raise
+            print(f"Navigation timeout (attempt {attempt + 1}/{retries}), retrying...")
+            time.sleep(2)
+
+
 def ensure_logged_in(page, context, profile: str):
     creds = load_profile(profile)
 
     email = creds["goodreads_email"]
     password = creds["goodreads_password"]
 
-    page.goto(GOODREADS_BASE_URL)
+    _goto_with_retry(page, GOODREADS_BASE_URL)
 
     # Already logged in?
     if page.locator("a[href*='/review/list']").count() > 0:
@@ -38,7 +51,7 @@ def ensure_logged_in(page, context, profile: str):
         return
 
     print(f"Logging into Goodreads ({profile})...")
-    page.goto(GOODREADS_LOGIN)
+    _goto_with_retry(page, GOODREADS_LOGIN)
 
     # 1️⃣ Wait for "Sign in with email" button
     sign_in_with_email = page.locator(
