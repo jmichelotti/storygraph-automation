@@ -34,3 +34,6 @@ audible-config/
 
 # Temporary venvs
 .venv*/
+
+# Claude Code
+.claude/
