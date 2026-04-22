@@ -1,6 +1,2 @@
 playwright==1.50.0
 audible-cli>=0.3.0,<0.4.0
-fastapi>=0.115.0,<1.0.0
-uvicorn>=0.30.0,<1.0.0
-pyyaml>=6.0,<7.0
-croniter>=2.0,<4.0

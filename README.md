@@ -4,9 +4,9 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 
 ---
 
-## ✨ Features
+## Features
 
-### 📚 Goodreads -> StoryGraph
+### Goodreads -> StoryGraph
 - Syncs **finished books** from Goodreads into StoryGraph
 - Automatically sets:
   - Reading status = **Read**
@@ -16,7 +16,7 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Profile-scoped state prevents duplicate uploads
 - Seed mode allows bootstrapping historical reads without touching StoryGraph
 
-### 🎧 Audible -> StoryGraph
+### Audible -> StoryGraph
 - Syncs **in-progress audiobook progress**
 - Detects:
   - New books
@@ -24,15 +24,15 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Updates StoryGraph percentage progress
 - Maintains per-profile sync state
 
-### 🕒 Automation-Ready
+### Automation-Ready
 - Safe for **headless execution**
 - Robust against partial failures (timeouts, missing data)
 - Append-only logging with timestamps
-- Designed to run **hourly or daily** via Task Scheduler
+- Designed to run **hourly or daily** via cron
 
 ---
 
-## 👤 Profiles
+## Profiles
 
 Profiles live in the `profiles/` directory and are **not committed**.
 
@@ -54,7 +54,7 @@ Profiles allow:
 
 ---
 
-## 🐳 Docker Setup (Recommended)
+## Docker Setup (Recommended)
 
 Everything runs in Docker containers via `docker-compose.yml`.
 
@@ -62,23 +62,19 @@ Everything runs in Docker containers via `docker-compose.yml`.
 
 ```bash
 docker compose build
-cp -r "$LOCALAPPDATA/Audible/." audible-config/   # copy Audible CLI auth
-docker compose up -d dashboard                      # start status API on port 1200
+cp -r /path/to/audible-config/. audible-config/   # copy Audible CLI auth
+cp /path/to/profiles/*.json profiles/              # copy profile credentials
 ```
 
 ### Scheduled runs
 
-Triggered by Windows Task Scheduler (or cron):
-```bash
-docker compose run --rm goodreads-kim      # Goodreads -> StoryGraph (Kim)
-docker compose run --rm audible-justin     # Audible -> StoryGraph (Justin)
-```
+Add to crontab (`crontab -e`):
+```cron
+# Goodreads -> StoryGraph (Kim) — every hour on the hour
+0 * * * * /path/to/storygraph-automation/docker/run-goodreads-kim.sh
 
-### Status dashboard
-
-```bash
-curl http://localhost:1200/status    # JSON: last run, next run, per-profile state
-curl http://localhost:1200/healthz   # health check
+# Audible -> StoryGraph (Justin) — 11:55 AM and 11:55 PM daily
+55 11,23 * * * /path/to/storygraph-automation/docker/run-audible-justin.sh
 ```
 
 ### MFA recovery
@@ -91,7 +87,7 @@ docker compose --profile mfa run --rm --service-ports goodreads-kim-mfa
 
 ---
 
-## 🚀 Local Usage (without Docker)
+## Local Usage (without Docker)
 
 ### Goodreads -> StoryGraph (Dry Run)
 
@@ -131,9 +127,9 @@ python runner.py --profile name
 
 ---
 
-## 📝 Logging
+## Logging
 
-Logs are **append-only** and stored per profile
+Logs are **append-only** and stored per profile.
 
 Each run includes:
 - Timestamped headers
@@ -142,11 +138,9 @@ Each run includes:
 - Skipped entries (with reasons)
 - Runtime duration
 
-Designed for long-running scheduled automation.
-
 ---
 
-## ⚠️ Notes & Limitations
+## Notes & Limitations
 
 - Goodreads timelines are lazily loaded — the scraper accounts for this
 - Missing or partial Goodreads data is safely skipped
@@ -155,17 +149,7 @@ Designed for long-running scheduled automation.
 
 ---
 
-## 🔧 Future Improvements
-
-- Retry logic for transient failures
-- Email / Discord notifications
-- ~~Configurable schedules~~ ✅ via `dashboard/schedules.yml`
-- CSV / JSON export modes
-- ~~Unified dashboard view~~ ✅ via `GET /status` on port 1200
-
----
-
-## 📜 License
+## License
 
 This project is provided as-is for personal experimentation.
 No affiliation with Goodreads, Amazon, or StoryGraph.

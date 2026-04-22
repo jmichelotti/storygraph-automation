@@ -4,34 +4,26 @@ Automates syncing reading activity into StoryGraph via Playwright browser automa
 
 ## Architecture — Docker
 
-Everything runs in Docker containers. One image, three services via `docker-compose.yml`:
+Everything runs in Docker containers. One image, two services via `docker-compose.yml`:
 
 | Service | Purpose | Lifecycle |
 |---------|---------|-----------|
-| `dashboard` | FastAPI JSON status API on `127.0.0.1:1200` | Long-lived (`restart: unless-stopped`) |
-| `goodreads-kim` | Goodreads -> StoryGraph sync (Kim) | One-shot, fired by Task Scheduler |
-| `audible-justin` | Audible -> StoryGraph sync (Justin) | One-shot, fired by Task Scheduler |
+| `goodreads-kim` | Goodreads -> StoryGraph sync (Kim) | One-shot, fired by cron |
+| `audible-justin` | Audible -> StoryGraph sync (Justin) | One-shot, fired by cron |
 
 Xvfb provides a virtual display inside the container, so the existing `headless=False` code works unchanged.
 
-### Task Scheduler commands
+### Cron schedule
 
-Replace the old `python ...` commands with:
 ```
-docker compose -f C:\dev\StoryGraphAutomation\docker-compose.yml run --rm goodreads-kim
-docker compose -f C:\dev\StoryGraphAutomation\docker-compose.yml run --rm audible-justin
-```
-- Kim: every hour on the hour
-- Justin: 11:55 AM and 11:55 PM daily
-- Task Scheduler can now use "Run whether user is logged on or not"
+# Kim: every hour on the hour
+0 * * * * /home/talon/dev/storygraph-automation/docker/run-goodreads-kim.sh
 
-### Dashboard
-
-```bash
-curl http://localhost:1200/status    # JSON: last run, next run, per-profile state
-curl http://localhost:1200/healthz   # health check
+# Justin: 11:55 AM and 11:55 PM daily
+55 11,23 * * * /home/talon/dev/storygraph-automation/docker/run-audible-justin.sh
 ```
-Start: `docker compose up -d dashboard`
+
+Edit with `crontab -e`.
 
 ### MFA recovery
 
@@ -46,9 +38,12 @@ Then open `http://localhost:6080/vnc.html` to see the browser and complete the c
 1. Build the image: `docker compose build`
 2. Copy Audible CLI auth into the project:
    ```bash
-   cp -r "$LOCALAPPDATA/Audible/." audible-config/
+   cp -r /path/to/audible-config/. audible-config/
    ```
-3. Start the dashboard: `docker compose up -d dashboard`
+3. Copy profile credentials:
+   ```bash
+   cp /path/to/profiles/*.json profiles/
+   ```
 4. Test a dry run: `docker compose run --rm goodreads-kim python -m goodreads --profile kim`
 
 ## Key conventions
@@ -60,7 +55,6 @@ Then open `http://localhost:6080/vnc.html` to see the browser and complete the c
 - Logs: `logs/goodreads/{profile}.log` and `logs/runner/{profile}.log` (append-only, read from tail)
 - `storygraph/runner_api.py` exposes `storygraph_session()` context manager for browser lifecycle
 - StoryGraph search has known quirks with `&` and `,` in queries — see fallback logic in `runner_api.py`
-- Schedule cadences for the dashboard live in `dashboard/schedules.yml`
 
 ## Testing changes
 
