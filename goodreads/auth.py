@@ -1,9 +1,9 @@
 import time
 from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from goodreads.config import GOODREADS_BASE_URL
 from profiles.load_profile import load_profile
 
+GOODREADS_BASE_URL = "https://www.goodreads.com"
 GOODREADS_LOGIN = f"{GOODREADS_BASE_URL}/user/sign_in"
 
 
