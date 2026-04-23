@@ -6,6 +6,7 @@ import time
 
 from storygraph.runner_api import update_books_progress
 from audible.audible_in_progress import export_library, get_in_progress_books
+from status import write_status
 
 
 def parse_args():
@@ -163,6 +164,15 @@ def main():
         log_line(log_file, "No updates needed.")
         log_line(log_file, f"RUN END — duration: {time.time() - start_ts:.1f}s")
         log_line(log_file)
+        write_status(profile, {
+            "status": "success",
+            "duration_seconds": round(time.time() - start_ts, 1),
+            "books_updated": 0,
+            "books_in_progress": [
+                {"title": b["title"], "percent_complete": b["percent_complete"]}
+                for b in audible_books
+            ],
+        })
         return
 
     print("\n Applying updates to StoryGraph...\n")
@@ -179,8 +189,19 @@ def main():
     print("GOOD! Sync state saved")
     log_line(log_file, "GOOD! Sync state saved")
 
-    log_line(log_file, f"RUN END — duration: {time.time() - start_ts:.1f}s")
+    duration = round(time.time() - start_ts, 1)
+    log_line(log_file, f"RUN END — duration: {duration:.1f}s")
     log_line(log_file)
+
+    write_status(profile, {
+        "status": "success",
+        "duration_seconds": duration,
+        "books_updated": len(updates),
+        "books_in_progress": [
+            {"title": b["title"], "percent_complete": b["percent_complete"]}
+            for b in audible_books
+        ],
+    })
 
 if __name__ == "__main__":
     main()

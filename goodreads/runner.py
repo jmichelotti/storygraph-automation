@@ -9,6 +9,7 @@ from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
 
 from storygraph.runner_api import update_books_read
+from status import write_status
 
 
 # ---------- Logging helpers ----------
@@ -215,6 +216,12 @@ def run(
         log_line(log_file)
         log_line(log_file, f"RUN END — duration: {duration:.1f}s")
         log_line(log_file)
+        write_status(profile, {
+            "status": "dry_run",
+            "duration_seconds": round(duration, 1),
+            "books_synced_total": len(processed),
+            "books_pending": len(updates),
+        })
         return
 
     if not updates:
@@ -225,6 +232,12 @@ def run(
         log_line(log_file)
         log_line(log_file, f"RUN END — duration: {duration:.1f}s")
         log_line(log_file)
+        write_status(profile, {
+            "status": "success",
+            "duration_seconds": round(duration, 1),
+            "books_synced_total": len(processed),
+            "books_synced_this_run": 0,
+        })
         return
 
     # ---------- PHASE 2: StoryGraph ----------
@@ -257,3 +270,10 @@ def run(
     duration = time.time() - start_ts
     log_line(log_file, f"RUN END — duration: {duration:.1f}s")
     log_line(log_file)
+
+    write_status(profile, {
+        "status": "success",
+        "duration_seconds": round(duration, 1),
+        "books_synced_total": len(processed),
+        "books_synced_this_run": len(applied_ids),
+    })

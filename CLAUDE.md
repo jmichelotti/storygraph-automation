@@ -53,6 +53,7 @@ Then open `http://localhost:6080/vnc.html` to see the browser and complete the c
 - Browser session state: `goodreads/state/` and `storygraph/state/`
 - Sync state (processed book IDs): `goodreads/state/state_{profile}.json` and `storygraph/state/sync_{profile}.json`
 - Logs: `logs/goodreads/{profile}.log` and `logs/runner/{profile}.log` (append-only, read from tail)
+- Run status: `status/status.json` — written by both runners after each run (last run time, duration, sync counts, next scheduled run). `status.py` owns this.
 - `storygraph/runner_api.py` exposes `storygraph_session()` context manager for browser lifecycle
 - StoryGraph search has known quirks with `&` and `,` in queries — see fallback logic in `runner_api.py`
 
