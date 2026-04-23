@@ -10,6 +10,7 @@ config.py
 
 # Logs & runtime output
 logs/
+status/
 *.log
 
 # Auth / session data (VERY important)
