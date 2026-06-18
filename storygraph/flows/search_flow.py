@@ -34,6 +34,8 @@ def search_books(
                     title=item["title"],
                     author=item["author"],
                     url=item["url"],
+                    editions=item.get("editions"),
+                    user_added=item.get("user_added", False),
                 )
             )
 

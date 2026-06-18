@@ -55,7 +55,10 @@ Then open `http://localhost:6080/vnc.html` to see the browser and complete the c
 - Logs: `logs/goodreads/{profile}.log` and `logs/runner/{profile}.log` (append-only, read from tail)
 - Run status: `status/status.json` — written by both runners after each run (last run time, duration, sync counts, next scheduled run). `status.py` owns this.
 - `storygraph/runner_api.py` exposes `storygraph_session()` context manager for browser lifecycle
-- StoryGraph search has known quirks with `&` and `,` in queries — see fallback logic in `runner_api.py`
+- StoryGraph search has quirks with `&`, `,`/parentheticals, and `:` subtitles — `update_books_read` in `runner_api.py` retries with progressively stripped queries before giving up
+- Duplicate StoryGraph entries (same title+author) are disambiguated in `find_matching_book` (`navigate_flow.py`): drop "user-added"/unreviewed entries, then prefer the one with the most editions
+- `set_read_dates` (`read_dates_flow.py`) only fills *missing* read dates, so it won't clobber dates a reader set by hand and won't crash on an already-read book
+- Each book in `update_books_read` is wrapped in try/except, so one bad book is logged and skipped (retried next run) rather than aborting the whole sync
 
 ## Testing changes
 

@@ -37,3 +37,6 @@ audible-config/
 
 # Claude Code
 .claude/
+
+# Playwright MCP browser artifacts (snapshots, screenshots, console logs)
+.playwright-mcp/

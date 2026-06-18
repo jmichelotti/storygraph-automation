@@ -108,12 +108,40 @@ def find_matching_book(
             )
             return no_bundles[0]
 
-        # 4️⃣ Still ambiguous -> skip safely
+        pool = no_bundles if no_bundles else source
+
+        # 4️⃣ Exclude "user-added" / not-yet-reviewed duplicates, preferring
+        # the canonical Librarian-reviewed record.
+        reviewed = [c for c in pool if not c.user_added]
+
+        if len(reviewed) == 1:
+            print(
+                f"INFO! Disambiguated by excluding user-added entries -> "
+                f"{reviewed[0].title} by {reviewed[0].author}"
+            )
+            return reviewed[0]
+
+        # 5️⃣ Prefer the entry with the most editions (the canonical record
+        # that nearly all readers use), if there's a clear leader.
+        edition_pool = reviewed if reviewed else pool
+        with_editions = [c for c in edition_pool if c.editions is not None]
+
+        if with_editions:
+            max_editions = max(c.editions for c in with_editions)
+            top = [c for c in with_editions if c.editions == max_editions]
+            if len(top) == 1:
+                print(
+                    f"INFO! Disambiguated by most editions ({max_editions}) -> "
+                    f"{top[0].title} by {top[0].author}"
+                )
+                return top[0]
+
+        # 6️⃣ Still ambiguous -> skip safely
         print(
             f"WARNING! Multiple StoryGraph matches for "
             f"'{expected_title}' by '{expected_author}' — skipping"
         )
-        for c in candidates:
+        for c in (reviewed if reviewed else pool):
             print(f"  - {c.title} by {c.author}")
         return None
 

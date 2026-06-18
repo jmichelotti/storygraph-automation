@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Page, TimeoutError
 
 class SearchPage:
@@ -89,6 +91,19 @@ class SearchPage:
                 names = [a.inner_text().strip() for a in author_links.all()]
                 author = ", ".join(names)
 
+            # --- Edition count (e.g. "37 editions" / "1 edition") ---
+            # Used to disambiguate duplicate entries: the canonical record
+            # almost always has far more editions than an accidental dupe.
+            editions = None
+            editions_link = pane.locator('a[href*="/editions"]').first
+            if editions_link.count() > 0:
+                m = re.search(r"\d+", editions_link.inner_text())
+                if m:
+                    editions = int(m.group())
+
+            # --- "user-added" badge: book not yet reviewed by a Librarian ---
+            user_added = pane.locator("span.user-added-label").count() > 0
+
             key = (title, author, url)
             if key in seen:
                 continue  #  duplicate (desktop/mobile/etc.)
@@ -98,6 +113,8 @@ class SearchPage:
                 "title": title,
                 "author": author,
                 "url": url,
+                "editions": editions,
+                "user_added": user_added,
             })
 
             # GOOD! Explicitly stop at top N unique results

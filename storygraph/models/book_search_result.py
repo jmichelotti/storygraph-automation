@@ -7,3 +7,6 @@ class BookSearchResult:
     title: str
     author: Optional[str]
     url: str
+    # Disambiguation signals for duplicate entries (same title + author).
+    editions: Optional[int] = None      # edition count, e.g. "37 editions"
+    user_added: bool = False            # flagged "user-added" / not Librarian-reviewed
