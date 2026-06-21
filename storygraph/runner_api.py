@@ -7,6 +7,7 @@ from profiles.load_profile import load_profile
 from storygraph.flows import ensure_logged_in, search_books
 from storygraph.flows.navigate_flow import (
     find_matching_book,
+    find_progress_match,
     navigate_to_book,
     set_reading_status,
     update_reading_progress,
@@ -73,7 +74,8 @@ def update_books_progress(
     books: list[dict],
     profile: str,
     headless: bool = False,
-) -> None:
+    log_file: Path | None = None,
+) -> set[str]:
     """
     Update StoryGraph progress for multiple books in a single browser session.
 
@@ -81,7 +83,18 @@ def update_books_progress(
       - title
       - authors
       - percent_complete
+
+    Returns the set of titles whose progress was actually written and verified.
+    Books that were skipped (no match) or failed to write are NOT included, so
+    the caller can avoid advancing sync state for them and retry next run.
     """
+    def _log(msg: str = "") -> None:
+        if log_file:
+            with log_file.open("a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+
+    applied: set[str] = set()
+
     with storygraph_session(profile, headless) as page:
         for book in books:
             title = book["title"]
@@ -92,36 +105,54 @@ def update_books_progress(
 
             print(f"\n Updating StoryGraph: {title} -> {percent}%")
 
-            results = search_books(
-                page,
-                [f"{title} {author}"],
-                max_results_per_title=3,
-            )
+            # Guard each book so one failure (a flaky page, a duplicate that
+            # can't be disambiguated) can never abort the whole run or be
+            # silently recorded as synced — log it and move on; an unsynced
+            # book is simply retried next run.
+            try:
+                results = search_books(
+                    page,
+                    [f"{title} {author}"],
+                    max_results_per_title=3,
+                )
 
-            match = find_matching_book(
-                results,
-                expected_title=title,
-                expected_author=author,
-            )
+                match = find_progress_match(
+                    page,
+                    results,
+                    expected_title=title,
+                    expected_author=author,
+                )
 
-            if not match:
-                print(f"WARNING! No exact StoryGraph match found for '{title}'")
+                if not match:
+                    _log(f"FAILED (no match): {title} -> {percent}% (will retry next run)")
+                    print(f"WARNING! No StoryGraph match for '{title}' — skipping")
+                    continue
+
+                navigate_to_book(page, match)
+
+                # Set to currently-reading before updating progress
+                # (required for new books that don't have a progress tracker yet)
+                set_reading_status(page, "currently-reading")
+
+                success = update_reading_progress(
+                    page,
+                    percent,
+                    progress_type="percentage",
+                )
+
+                if success:
+                    applied.add(title)
+                    _log(f"OK (synced): {title} -> {percent}%")
+                    print(f"GOOD! Synced '{title}' -> {percent}%")
+                else:
+                    _log(f"FAILED (write): {title} -> {percent}% (will retry next run)")
+                    print(f"WARNING! Progress update failed for '{title}'")
+            except Exception as e:
+                _log(f"FAILED (error): {title} -> {percent}% — {e} (will retry next run)")
+                print(f"WARNING! Error updating '{title}': {e}")
                 continue
 
-            navigate_to_book(page, match)
-
-            # Set to currently-reading before updating progress
-            # (required for new books that don't have a progress tracker yet)
-            set_reading_status(page, "currently-reading")
-
-            success = update_reading_progress(
-                page,
-                percent,
-                progress_type="percentage",
-            )
-
-            if not success:
-                print("WARNING! Progress update failed")
+    return applied
 
 
 def update_books_read(

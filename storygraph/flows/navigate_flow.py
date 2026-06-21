@@ -17,16 +17,14 @@ def tokens(text: str) -> set[str]:
     return set(normalize(text).split())
 
 
-def find_matching_book(
+def _token_candidates(
     results: list[BookSearchResult],
     expected_title: str,
     expected_author: Optional[str],
-) -> Optional[BookSearchResult]:
+) -> list[BookSearchResult]:
     """
-    STRICT matching:
-    - Title must share tokens
-    - Author MUST match if provided
-    - No title-only fallback when author is present
+    Results whose title shares a token and (if an author is given) whose author
+    matches. This is the raw candidate pool before any disambiguation.
     """
     expected_title_tokens = tokens(expected_title)
     expected_author_tokens = tokens(expected_author) if expected_author else None
@@ -50,6 +48,22 @@ def find_matching_book(
                 continue
 
         candidates.append(r)
+
+    return candidates
+
+
+def find_matching_book(
+    results: list[BookSearchResult],
+    expected_title: str,
+    expected_author: Optional[str],
+) -> Optional[BookSearchResult]:
+    """
+    STRICT matching:
+    - Title must share tokens
+    - Author MUST match if provided
+    - No title-only fallback when author is present
+    """
+    candidates = _token_candidates(results, expected_title, expected_author)
 
     if not candidates:
         print(
@@ -146,6 +160,53 @@ def find_matching_book(
         return None
 
     return candidates[0]
+
+
+def find_progress_match(
+    page: Page,
+    results: list[BookSearchResult],
+    expected_title: str,
+    expected_author: Optional[str],
+) -> Optional[BookSearchResult]:
+    """
+    Match for a *progress* update.
+
+    Tries the strict matcher first. When that can't disambiguate duplicate
+    catalog entries (same title + author, identical on every search-result
+    signal), fall back to the one the reader is already tracking — i.e. the
+    duplicate that already shows reading progress. Only that record is on the
+    user's shelf, so it is the correct target even when the entries look
+    identical in search results.
+    """
+    match = find_matching_book(results, expected_title, expected_author)
+    if match:
+        return match
+
+    candidates = _token_candidates(results, expected_title, expected_author)
+    if len(candidates) <= 1:
+        return None
+
+    with_progress: list[BookSearchResult] = []
+    for c in candidates:
+        try:
+            navigate_to_book(page, c)
+            if get_current_progress_percentage(page) is not None:
+                with_progress.append(c)
+        except Exception as e:
+            print(f"WARNING! Could not inspect candidate {c.url}: {e}")
+
+    if len(with_progress) == 1:
+        print(
+            f"INFO! Disambiguated by existing progress -> "
+            f"{with_progress[0].title} ({with_progress[0].url})"
+        )
+        return with_progress[0]
+
+    print(
+        f"WARNING! Could not disambiguate duplicates for '{expected_title}' "
+        f"by progress ({len(with_progress)} of {len(candidates)} have progress)"
+    )
+    return None
 
 
 def navigate_to_book(page: Page, book: BookSearchResult) -> None:

@@ -56,14 +56,19 @@ Then open `http://localhost:6080/vnc.html` to see the browser and complete the c
 - Run status: `status/status.json` — written by both runners after each run (last run time, duration, sync counts, next scheduled run). `status.py` owns this.
 - `storygraph/runner_api.py` exposes `storygraph_session()` context manager for browser lifecycle
 - StoryGraph search has quirks with `&`, `,`/parentheticals, and `:` subtitles — `update_books_read` in `runner_api.py` retries with progressively stripped queries before giving up
-- Duplicate StoryGraph entries (same title+author) are disambiguated in `find_matching_book` (`navigate_flow.py`): drop "user-added"/unreviewed entries, then prefer the one with the most editions
+- Duplicate StoryGraph entries (same title+author) are disambiguated in `find_matching_book` (`navigate_flow.py`): drop "user-added"/unreviewed entries, then prefer the one with the most editions. For *progress* updates, `find_progress_match` adds a final fallback: if both duplicates still look identical, pick the one that already shows reading progress (the record actually on the reader's shelf)
 - `set_read_dates` (`read_dates_flow.py`) only fills *missing* read dates, so it won't clobber dates a reader set by hand and won't crash on an already-read book
-- Each book in `update_books_read` is wrapped in try/except, so one bad book is logged and skipped (retried next run) rather than aborting the whole sync
+- Each book in `update_books_read` and `update_books_progress` is wrapped in try/except, so one bad book is logged and skipped (retried next run) rather than aborting the whole sync
+- `update_books_progress` returns the set of titles it *verified* on StoryGraph; `runner.py` only advances sync state for those (failed/skipped books keep their prior value so they retry next run) and logs per-book `OK (synced)` / `FAILED (…will retry)` to `logs/runner/{profile}.log`. Never advance sync state on an unverified write — that silently masks failures and the book is never retried
 
 ## Testing changes
 
 ### Via Docker (production path)
+
+Source is baked into the image at build time — **after editing any `.py` you must `docker compose build`** or the container (and cron) keep running the old code. A stale image silently running pre-fix code has already caused a production bug.
+
 ```
+docker compose build                                                       # required after code edits
 docker compose run --rm goodreads-kim python -m goodreads --profile kim    # dry-run
 docker compose run --rm audible-justin                                     # diffs only if no changes
 ```

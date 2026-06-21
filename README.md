@@ -22,6 +22,8 @@ A Python automation tool that syncs reading and listening activity from **Goodre
   - New books
   - Progress changes
 - Updates StoryGraph percentage progress
+- Handles duplicate StoryGraph catalog entries (picks the record on the reader's shelf)
+- Verifies each write and only advances sync state on success — failed updates retry next run instead of being silently dropped
 - Maintains per-profile sync state
 
 ### Automation-Ready
