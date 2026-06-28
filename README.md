@@ -12,6 +12,7 @@ A Python automation tool that syncs reading and listening activity from **Goodre
   - Reading status = **Read**
   - Start date
   - Finish date
+- Forces a **physical edition** so Goodreads reads don't land on StoryGraph as audiobooks
 - Supports **multiple profiles** (separate Goodreads + StoryGraph accounts)
 - Profile-scoped state prevents duplicate uploads
 - Seed mode allows bootstrapping historical reads without touching StoryGraph
@@ -22,6 +23,8 @@ A Python automation tool that syncs reading and listening activity from **Goodre
   - New books
   - Progress changes
 - Updates StoryGraph percentage progress
+- Forces an **audiobook edition** and remembers it (per-book URL in sync state) for stable re-sync
+- Handles StoryGraph search quirks (`&`, parentheticals, `:` subtitles) by retrying with simplified queries
 - Handles duplicate StoryGraph catalog entries (picks the record on the reader's shelf)
 - Verifies each write and only advances sync state on success — failed updates retry next run instead of being silently dropped
 - Maintains per-profile sync state
@@ -126,6 +129,19 @@ python runner.py --profile name
 - Detects new or changed progress
 - Updates StoryGraph only when needed
 - Saves per-profile sync state
+
+---
+
+### Fix a single book's format
+
+One-off helper to correct a book that was logged in the wrong format (e.g. an
+older sync that landed as an audiobook). Switches the edition, preserving read
+dates / progress:
+
+```bash
+python -m storygraph.fix_format --profile name --title "Book Title" --format physical
+python -m storygraph.fix_format --profile name --title "Book Title" --format audiobook
+```
 
 ---
 

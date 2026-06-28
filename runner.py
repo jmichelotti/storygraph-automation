@@ -45,14 +45,19 @@ def load_sync_state(path: Path) -> dict:
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
-def save_sync_state(path: Path, audible_books: list[dict]) -> None:
+def save_sync_state(path: Path, books: list[dict]) -> None:
     state = {}
 
-    for book in audible_books:
-        state[book["title"]] = {
+    for book in books:
+        record = {
             "percent_complete": book["percent_complete"],
             "updated_at": datetime.now(UTC).isoformat(),
         }
+        # The edition URL we settled on (the audiobook edition) so the next run
+        # can go straight to it instead of searching by title again.
+        if book.get("book_url"):
+            record["book_url"] = book["book_url"]
+        state[book["title"]] = record
 
     path.write_text(
         json.dumps(state, indent=2),
@@ -63,6 +68,7 @@ def persisted_books(
     audible_books: list[dict],
     failed: list[dict],
     sync_state: dict,
+    settled_urls: dict[str, str],
 ) -> list[dict]:
     """
     Build the book list to persist to sync state.
@@ -71,18 +77,26 @@ def persisted_books(
     omitted entirely if they were never synced before) so the next run re-attempts
     them, rather than silently advancing the stored value and treating them as
     done.
+
+    Each book's edition URL is carried forward: the one we settled on this run if
+    it was synced, otherwise whatever was previously stored.
     """
     failed_titles = {b["title"] for b in failed}
     out: list[dict] = []
     for book in audible_books:
         title = book["title"]
+        prev = sync_state.get(title) or {}
+        book_url = settled_urls.get(title) or prev.get("book_url")
         if title in failed_titles:
-            prev = sync_state.get(title)
-            if prev is None:
+            if not prev:
                 continue  # never synced before -> retry as new next run
-            out.append({**book, "percent_complete": prev["percent_complete"]})
+            out.append({
+                **book,
+                "percent_complete": prev["percent_complete"],
+                "book_url": book_url,
+            })
         else:
-            out.append(book)
+            out.append({**book, "book_url": book_url})
     return out
 
 
@@ -106,6 +120,9 @@ def diff_audible_vs_sync(
         previous_percent = (
             previous["percent_complete"] if previous else None
         )
+        # Carry the previously-settled edition URL into the update so the writer
+        # can navigate straight to it instead of re-searching by title.
+        previous_url = previous.get("book_url") if previous else None
 
         if previous_percent is None:
             updates.append(
@@ -113,6 +130,7 @@ def diff_audible_vs_sync(
                     **book,
                     "reason": "new",
                     "previous_percent": None,
+                    "book_url": previous_url,
                 }
             )
         elif abs(current_percent - previous_percent) > 0.01:
@@ -121,6 +139,7 @@ def diff_audible_vs_sync(
                     **book,
                     "reason": "changed",
                     "previous_percent": previous_percent,
+                    "book_url": previous_url,
                 }
             )
         else:
@@ -206,29 +225,32 @@ def main():
     print("\n Applying updates to StoryGraph...\n")
     log_line(log_file, "Applying updates to StoryGraph...")
 
-    succeeded = update_books_progress(
+    succeeded_urls = update_books_progress(
         books=updates,
         profile=profile,
         headless=False,
         log_file=log_file,
     )
 
-    failed = [u for u in updates if u["title"] not in succeeded]
+    failed = [u for u in updates if u["title"] not in succeeded_urls]
 
     # Only advance sync state for books we actually wrote. Failed books keep
     # their previous value (or are dropped) so they're retried next run instead
     # of being silently treated as synced.
     print("\n Saving sync state...")
-    save_sync_state(sync_state_path, persisted_books(audible_books, failed, sync_state))
+    save_sync_state(
+        sync_state_path,
+        persisted_books(audible_books, failed, sync_state, succeeded_urls),
+    )
 
     duration = round(time.time() - start_ts, 1)
 
     if failed:
-        log_line(log_file, f"PARTIAL — {len(succeeded)} synced, {len(failed)} failed (will retry):")
+        log_line(log_file, f"PARTIAL — {len(succeeded_urls)} synced, {len(failed)} failed (will retry):")
         for u in failed:
             log_line(log_file, f"  FAILED: {u['title']} -> {u['percent_complete']}%")
     else:
-        log_line(log_file, f"GOOD! All {len(succeeded)} update(s) synced and state saved")
+        log_line(log_file, f"GOOD! All {len(succeeded_urls)} update(s) synced and state saved")
 
     log_line(log_file, f"RUN END — duration: {duration:.1f}s")
     log_line(log_file)
@@ -236,7 +258,7 @@ def main():
     write_status(profile, {
         "status": "success" if not failed else "partial",
         "duration_seconds": duration,
-        "books_updated": len(succeeded),
+        "books_updated": len(succeeded_urls),
         "books_failed": [
             {"title": u["title"], "percent_complete": u["percent_complete"]}
             for u in failed

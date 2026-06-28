@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from profiles.load_profile import load_profile
-from storygraph.flows import ensure_logged_in, search_books
+from storygraph.flows import ensure_logged_in, search_books, ensure_book_format
 from storygraph.flows.navigate_flow import (
     find_matching_book,
     find_progress_match,
@@ -32,6 +32,59 @@ def normalize_author_for_search(author: str | None) -> str | None:
             return f"{first} {last}"
 
     return author
+
+
+def search_book_with_fallbacks(page, title, author, match_fn, log=None):
+    """
+    Search StoryGraph for a book, retrying with progressively simplified queries
+    to work around StoryGraph's search quirks:
+      - it truncates at '&'              -> retry with 'and'
+      - it drops parenthetical series tags like '(The Selvaren, #1)'
+      - it doesn't index ':' subtitles  -> e.g. 'Allegiance: Star Wars Legends',
+        'Annie Knows Everything: A Novel'
+
+    `match_fn(results)` selects the match from a result list — pass
+    `find_matching_book` for reads or a `find_progress_match` closure for
+    progress. Returns the matched BookSearchResult or None. Used by both the
+    Goodreads (read) and Audible (progress) paths so the quirk handling stays in
+    one place.
+    """
+    def emit(msg: str) -> None:
+        print(msg)
+        if log:
+            log(msg)
+
+    base = f"{title} {author}" if author else title
+    attempts = [("initial", base)]
+    if "&" in base:
+        attempts.append(("& -> and", base.replace("&", "and")))
+    if re.search(r"\(", title):
+        stripped = re.sub(r"\s*\([^)]*\)", "", title).strip()
+        if stripped and stripped != title:
+            attempts.append(
+                ("strip parens", f"{stripped} {author}" if author else stripped)
+            )
+    if ":" in title:
+        stripped = title.split(":", 1)[0].strip()
+        if stripped and stripped != title:
+            attempts.append(
+                ("strip subtitle", f"{stripped} {author}" if author else stripped)
+            )
+
+    for label, query in attempts:
+        emit(f"SG SEARCH ({label}) -> '{query}'")
+        results = search_books(page, [query], max_results_per_title=3)
+        emit(
+            f"SG RESULTS -> {len(results)} result(s): "
+            + ", ".join(f"'{r.title}' by '{r.author}'" for r in results)
+        )
+        match = match_fn(results)
+        if match:
+            emit(f"SG MATCH -> '{match.title}' by '{match.author}' @ {match.url}")
+            return match
+
+    emit(f"SG NO MATCH for '{title}' by '{author}'")
+    return None
 
 
 @contextmanager
@@ -75,7 +128,7 @@ def update_books_progress(
     profile: str,
     headless: bool = False,
     log_file: Path | None = None,
-) -> set[str]:
+) -> dict[str, str]:
     """
     Update StoryGraph progress for multiple books in a single browser session.
 
@@ -83,23 +136,30 @@ def update_books_progress(
       - title
       - authors
       - percent_complete
+      - book_url (optional): the edition URL we settled on a previous run. When
+        present we navigate straight to it instead of searching — this both skips
+        the (sometimes ambiguous) title search and keeps us on the audiobook
+        edition we previously switched to.
 
-    Returns the set of titles whose progress was actually written and verified.
-    Books that were skipped (no match) or failed to write are NOT included, so
-    the caller can avoid advancing sync state for them and retry next run.
+    Returns a mapping of title -> settled edition URL for every book whose
+    progress was actually written and verified. Books that were skipped (no
+    match) or failed to write are NOT included, so the caller can avoid advancing
+    sync state for them and retry next run. The settled URL is the audiobook
+    edition the book now lives on, which the caller persists for next time.
     """
     def _log(msg: str = "") -> None:
         if log_file:
             with log_file.open("a", encoding="utf-8") as f:
                 f.write(msg + "\n")
 
-    applied: set[str] = set()
+    applied: dict[str, str] = {}
 
     with storygraph_session(profile, headless) as page:
         for book in books:
             title = book["title"]
             raw_author = book.get("authors") or book.get("author")
             author = normalize_author_for_search(raw_author)
+            stored_url = book.get("book_url")
 
             percent = int(round(book["percent_complete"]))
 
@@ -110,25 +170,34 @@ def update_books_progress(
             # silently recorded as synced — log it and move on; an unsynced
             # book is simply retried next run.
             try:
-                results = search_books(
-                    page,
-                    [f"{title} {author}"],
-                    max_results_per_title=3,
-                )
+                if stored_url:
+                    # We already know the exact edition for this book — go there
+                    # directly rather than searching again.
+                    print(f"INFO! Using stored edition -> {stored_url}")
+                    _log(f"SG DIRECT -> {title} @ {stored_url}")
+                    page.goto(stored_url, wait_until="domcontentloaded")
+                    page.wait_for_selector(
+                        "#storygraph-preview-pane-desktop", timeout=30000
+                    )
+                    match_url = stored_url
+                else:
+                    match = search_book_with_fallbacks(
+                        page,
+                        title,
+                        author,
+                        lambda results: find_progress_match(
+                            page, results, expected_title=title, expected_author=author
+                        ),
+                        log=_log,
+                    )
 
-                match = find_progress_match(
-                    page,
-                    results,
-                    expected_title=title,
-                    expected_author=author,
-                )
+                    if not match:
+                        _log(f"FAILED (no match): {title} -> {percent}% (will retry next run)")
+                        print(f"WARNING! No StoryGraph match for '{title}' — skipping")
+                        continue
 
-                if not match:
-                    _log(f"FAILED (no match): {title} -> {percent}% (will retry next run)")
-                    print(f"WARNING! No StoryGraph match for '{title}' — skipping")
-                    continue
-
-                navigate_to_book(page, match)
+                    navigate_to_book(page, match)
+                    match_url = match.url
 
                 # Set to currently-reading before updating progress
                 # (required for new books that don't have a progress tracker yet)
@@ -141,7 +210,14 @@ def update_books_progress(
                 )
 
                 if success:
-                    applied.add(title)
+                    # Audible books are audiobooks — make sure StoryGraph shows
+                    # them as one. ensure_book_format moves the (just-written)
+                    # progress to an audio edition and returns its URL, which we
+                    # persist so the next run goes straight there.
+                    settled_url = ensure_book_format(
+                        page, match_url, "audiobook", log=_log
+                    )
+                    applied[title] = settled_url
                     _log(f"OK (synced): {title} -> {percent}%")
                     print(f"GOOD! Synced '{title}' -> {percent}%")
                 else:
@@ -192,103 +268,21 @@ def update_books_read(
             # StoryGraph state) can never abort the whole run — log it and
             # move on; an unsynced book is simply retried next run.
             try:
-                query = f"{title} {author}" if author else title
+                _log(f"SG AUTHOR raw '{raw_author}' -> normalized '{author}'")
 
-                _log(
-                    f"SG SEARCH -> '{query}' "
-                    f"(raw author: '{raw_author}' -> normalized: '{author}')"
-                )
-                print(
-                    f"SEARCH QUERY -> '{query}' "
-                    f"(title='{title}' author='{author}')"
-                )
-
-                results = search_books(
+                match = search_book_with_fallbacks(
                     page,
-                    [query],
-                    max_results_per_title=3,
+                    title,
+                    author,
+                    lambda results: find_matching_book(
+                        results, expected_title=title, expected_author=author
+                    ),
+                    log=_log,
                 )
-
-                _log(f"SG RESULTS -> {len(results)} result(s): "
-                     + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
-
-                match = find_matching_book(
-                    results,
-                    expected_title=title,
-                    expected_author=author,
-                )
-
-                # Fallback: StoryGraph truncates searches at '&', returning unrelated
-                # results. If no match was found and the query contains '&', retry
-                # with 'and' before giving up.
-                if not match and "&" in query:
-                    fallback_query = query.replace("&", "and")
-                    _log(f"SG SEARCH FALLBACK (& -> and) -> '{fallback_query}'")
-                    print(f"RETRY SEARCH (& -> and) -> '{fallback_query}'")
-                    results = search_books(
-                        page,
-                        [fallback_query],
-                        max_results_per_title=3,
-                    )
-                    _log(f"SG FALLBACK RESULTS -> {len(results)} result(s): "
-                         + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
-                    match = find_matching_book(
-                        results,
-                        expected_title=title,
-                        expected_author=author,
-                    )
-
-                # Fallback: StoryGraph truncates searches at ',' so titles with
-                # parentheticals like "(The Selvaren, #1)" return no results.
-                # Strip the parenthetical and retry with just the base title.
-                if not match and re.search(r'\(', title):
-                    stripped_title = re.sub(r'\s*\([^)]*\)', '', title).strip()
-                    if stripped_title and stripped_title != title:
-                        fallback_query = f"{stripped_title} {author}" if author else stripped_title
-                        _log(f"SG SEARCH FALLBACK (strip parens) -> '{fallback_query}'")
-                        print(f"RETRY SEARCH (strip parens) -> '{fallback_query}'")
-                        results = search_books(
-                            page,
-                            [fallback_query],
-                            max_results_per_title=3,
-                        )
-                        _log(f"SG FALLBACK RESULTS (strip parens) -> {len(results)} result(s): "
-                             + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
-                        match = find_matching_book(
-                            results,
-                            expected_title=title,
-                            expected_author=author,
-                        )
-
-                # Fallback: Goodreads often appends a subtitle after a colon
-                # (e.g. "Annie Knows Everything: A Novel") that StoryGraph does not
-                # index, so the full query returns no results. Strip everything from
-                # the first colon onward and retry with just the main title.
-                if not match and ":" in title:
-                    stripped_title = title.split(":", 1)[0].strip()
-                    if stripped_title and stripped_title != title:
-                        fallback_query = f"{stripped_title} {author}" if author else stripped_title
-                        _log(f"SG SEARCH FALLBACK (strip subtitle) -> '{fallback_query}'")
-                        print(f"RETRY SEARCH (strip subtitle) -> '{fallback_query}'")
-                        results = search_books(
-                            page,
-                            [fallback_query],
-                            max_results_per_title=3,
-                        )
-                        _log(f"SG FALLBACK RESULTS (strip subtitle) -> {len(results)} result(s): "
-                             + ", ".join(f"'{r.title}' by '{r.author}'" for r in results))
-                        match = find_matching_book(
-                            results,
-                            expected_title=title,
-                            expected_author=author,
-                        )
 
                 if not match:
-                    _log(f"WARNING! No StoryGraph match for '{title}' by '{author}'")
                     print(f"WARNING! No exact StoryGraph match found for '{title}'")
                     continue
-
-                _log(f"SG MATCH -> '{match.title}' by '{match.author}' @ {match.url}")
 
                 navigate_to_book(page, match)
 
@@ -303,6 +297,12 @@ def update_books_read(
                 print("GOOD! Book marked as read with dates")
                 _log(f"GOOD! Marked as read: '{title}' (start={date_started}, finish={date_finished})")
                 applied.add(book["review_id"])
+
+                # Goodreads books are read in print — force a physical edition so
+                # they don't land on StoryGraph as audiobooks. Best-effort: the
+                # book is already (verified) marked read above, so a format
+                # failure here only logs and never un-does the sync.
+                ensure_book_format(page, match.url, "physical", log=_log)
             except Exception as exc:
                 _log(f"ERROR! Failed to sync '{title}': {exc!r} — skipping (will retry next run)")
                 print(f"ERROR! Failed to sync '{title}': {exc!r} — skipping")

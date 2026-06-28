@@ -318,57 +318,71 @@ def update_reading_progress(
     
     # Get input elements from this specific form
     number_input = form.locator("input.read-status-progress-number")
-    minutes_input = form.locator("input.read-status-progress-minutes")
     select = form.locator("select.read-status-progress-type")
     
-    # Always set progress type first if the select exists
+    # Pick the progress unit. The type selector varies by format — audiobooks
+    # offer minutes/percentage, ebooks pages/percentage — so choose from the
+    # options actually present rather than assuming. We track in percentage when
+    # offered (audiobooks always offer it). Crucially, only change the selector
+    # when it isn't already on the target: re-selecting the current value forces
+    # a form re-render that briefly detaches the number input, which used to make
+    # the very next is_visible() check fail on audiobooks already in % mode.
     if select.count() > 0:
-        # Check if this is an audiobook (minutes input is visible)
-        if minutes_input.is_visible():
-            # Audiobook - switch to percentage mode
-            print("INFO! Audiobook detected — switching to percentage mode")
-            select.select_option("percentage")
-            page.wait_for_timeout(500)  # Wait for mode switch
+        options = [
+            o.get_attribute("value") for o in select.first.locator("option").all()
+        ]
+        if progress_type == "pages" and "pages" in options:
+            target = "pages"
+        elif "percentage" in options:
+            target = "percentage"
         else:
-            # Ebook with type selector - set the type first
-            print(f"INFO! Ebook detected — setting progress type to '{progress_type}'")
-            select.select_option("percentage" if progress_type == "percentage" else "pages")
-            page.wait_for_timeout(500)  # Wait for type switch
-    
-    # Fill in the progress value
-    if number_input.is_visible():
-        number_input.fill("")  # Clear first
-        number_input.fill(str(value))
-        
-        # Click save button
-        save_button = form.locator("input.progress-tracker-update-button")
-        save_button.click()
-        
-        # Wait for the form to close (indicates save completed)
-        try:
-            page.wait_for_selector(
-                "div.progress-tracking-form:visible",
-                state="hidden",
-                timeout=5000,
-            )
-        except TimeoutError:
-            print("WARNING! Progress form did not close after save")
-        
-        # Give StoryGraph time to update the DOM
-        page.wait_for_timeout(1500)
-        
-        # Verify the update
-        actual = get_current_progress_percentage(page)
-        if actual is not None and abs(actual - value) <= 1:
-            print(f"GOOD! Verified progress: {actual}%")
-            return True
+            target = options[-1] if options else None
+
+        current = select.first.input_value()
+        if target and current != target:
+            print(f"INFO! Setting progress type -> '{target}' (was '{current}')")
+            select.select_option(target)
+            page.wait_for_timeout(800)  # let the form re-render
         else:
-            print(f"WARNING! Progress shows {actual}% (expected {value}%)")
-            # Still return True if we got this far - the update likely worked
-            return actual is not None
-    
-    print("WARNING! Could not update progress")
-    return False
+            print(f"INFO! Progress type already '{current}'")
+
+    # The number input can briefly detach while the form re-renders after a type
+    # change, so wait for it to settle rather than checking visibility instantly.
+    try:
+        number_input.wait_for(state="visible", timeout=5000)
+    except TimeoutError:
+        print("WARNING! Could not update progress (number input not visible)")
+        return False
+
+    number_input.fill("")  # Clear first
+    number_input.fill(str(value))
+
+    # Click save button
+    save_button = form.locator("input.progress-tracker-update-button")
+    save_button.click()
+
+    # Wait for the form to close (indicates save completed)
+    try:
+        page.wait_for_selector(
+            "div.progress-tracking-form:visible",
+            state="hidden",
+            timeout=5000,
+        )
+    except TimeoutError:
+        print("WARNING! Progress form did not close after save")
+
+    # Give StoryGraph time to update the DOM
+    page.wait_for_timeout(1500)
+
+    # Verify the update
+    actual = get_current_progress_percentage(page)
+    if actual is not None and abs(actual - value) <= 1:
+        print(f"GOOD! Verified progress: {actual}%")
+        return True
+    else:
+        print(f"WARNING! Progress shows {actual}% (expected {value}%)")
+        # Still return True if we got this far - the update likely worked
+        return actual is not None
 
 
 def get_current_progress_percentage(page: Page) -> int | None:
