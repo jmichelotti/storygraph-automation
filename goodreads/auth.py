@@ -1,6 +1,9 @@
 import time
 from pathlib import Path
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import (
+    Error as PlaywrightError,
+    TimeoutError as PlaywrightTimeoutError,
+)
 from profiles.load_profile import load_profile
 
 GOODREADS_BASE_URL = "https://www.goodreads.com"
@@ -26,15 +29,31 @@ def get_browser(playwright, profile: str, headless=False):
 
 
 def _goto_with_retry(page, url, retries=3, wait_until="domcontentloaded", timeout=60_000):
+    """
+    Navigate with retries and exponential backoff.
+
+    Goodreads' bot mitigation answers a burst of runs by aborting the
+    navigation outright (net::ERR_ABORTED), which arrives as a plain Playwright
+    Error rather than a timeout — so it used to skip the retry loop entirely and
+    kill the run in about a second. Both failure modes are transient, so retry
+    on any navigation error and back off between attempts instead of hammering.
+    """
+    delay = 10
+
     for attempt in range(retries):
         try:
             page.goto(url, wait_until=wait_until, timeout=timeout)
             return
-        except PlaywrightTimeoutError:
+        except (PlaywrightTimeoutError, PlaywrightError) as exc:
             if attempt == retries - 1:
                 raise
-            print(f"Navigation timeout (attempt {attempt + 1}/{retries}), retrying...")
-            time.sleep(2)
+            reason = str(exc).splitlines()[0]
+            print(
+                f"Navigation failed (attempt {attempt + 1}/{retries}): {reason} "
+                f"— retrying in {delay}s..."
+            )
+            time.sleep(delay)
+            delay *= 2
 
 
 def ensure_logged_in(page, context, profile: str):

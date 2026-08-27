@@ -17,6 +17,19 @@ def tokens(text: str) -> set[str]:
     return set(normalize(text).split())
 
 
+def compact(text: str) -> str:
+    """
+    Normalized text with all spacing removed.
+
+    Goodreads and StoryGraph disagree about spacing in initial-style author
+    names — 'J, MK' normalizes to 'MK J' while StoryGraph lists 'MKJ' — and no
+    shared token can bridge that. Comparing the space-free forms catches it
+    without loosening the match the way substring comparison would ('J' would
+    otherwise match every author containing a J).
+    """
+    return normalize(text).replace(" ", "")
+
+
 def _token_candidates(
     results: list[BookSearchResult],
     expected_title: str,
@@ -28,6 +41,7 @@ def _token_candidates(
     """
     expected_title_tokens = tokens(expected_title)
     expected_author_tokens = tokens(expected_author) if expected_author else None
+    expected_author_compact = compact(expected_author) if expected_author else None
 
     candidates: list[BookSearchResult] = []
 
@@ -42,9 +56,14 @@ def _token_candidates(
             continue
 
         # --- Author check (STRICT) ---
+        # A shared token is the normal signal; identical space-free forms cover
+        # the initials-spacing disagreement ('MK J' vs 'MKJ').
         if expected_author_tokens:
-            result_author_tokens = tokens(r.author)
-            if expected_author_tokens.intersection(result_author_tokens) == set():
+            shares_token = bool(
+                expected_author_tokens.intersection(tokens(r.author))
+            )
+            same_compact = compact(r.author) == expected_author_compact
+            if not shares_token and not same_compact:
                 continue
 
         candidates.append(r)

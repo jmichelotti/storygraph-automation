@@ -9,7 +9,7 @@ from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
 
 from storygraph.runner_api import update_books_read
-from status import write_status
+from status import write_status, write_failure_status
 
 
 # ---------- Logging helpers ----------
@@ -53,6 +53,34 @@ def save_state(profile: str, state: dict) -> None:
 # ---------- Main runner ----------
 
 def run(
+    profile: str,
+    headless: bool = False,
+    dry_run: bool = True,
+    seed_before: date | None = None,
+):
+    """
+    Run the sync, recording a "failed" status if it dies.
+
+    Without this an exception (expired StoryGraph session, Playwright timeout)
+    escapes to cron's discarded stderr and status.json just stops updating.
+    The exception is re-raised so the run script sees a non-zero exit.
+    """
+    log_file = get_log_path(profile)
+    start_ts = time.time()
+
+    try:
+        _run(
+            profile=profile,
+            headless=headless,
+            dry_run=dry_run,
+            seed_before=seed_before,
+        )
+    except Exception as exc:
+        write_failure_status(profile, exc, time.time() - start_ts, log_file)
+        raise
+
+
+def _run(
     profile: str,
     headless: bool = False,
     dry_run: bool = True,

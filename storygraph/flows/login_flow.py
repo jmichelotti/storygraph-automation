@@ -27,7 +27,21 @@ def ensure_logged_in(page: Page, email: str, password: str) -> None:
 
         login_page = LoginPage(page)
         login_page.goto()
-        login_page.login(email, password)
+
+        try:
+            login_page.login(email, password)
+        except Exception as exc:
+            # LoginPage.login asserts the email field is gone after submitting.
+            # If it's still on the page the credentials were rejected — say so,
+            # because the raw Playwright assertion ("expected count 0") gives no
+            # hint that the stored password went stale. A password change also
+            # invalidates the saved session, so this is the first thing to hit.
+            if page.locator('input[name="user[email]"]').count() > 0:
+                raise RuntimeError(
+                    f"StoryGraph login failed for {email} — check "
+                    f"storygraph_password in profiles/*.json"
+                ) from exc
+            raise
 
         print("GOOD! Login successful")
     else:

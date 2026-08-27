@@ -6,7 +6,7 @@ import time
 
 from storygraph.runner_api import update_books_progress
 from audible.audible_in_progress import export_library, get_in_progress_books
-from status import write_status
+from status import write_status, write_failure_status
 
 
 def parse_args():
@@ -174,12 +174,27 @@ def print_diff(updates: list[dict], unchanged: list[dict]) -> None:
 
 
 def main():
+    """
+    Run the sync, recording a "failed" status if it dies.
+
+    Without this an exception (expired StoryGraph session, Playwright timeout,
+    Audible CLI failure) escapes to cron's discarded stderr and status.json just
+    stops updating. The exception is re-raised so the run script exits non-zero.
+    """
     args = parse_args()
     profile = args.profile
 
     log_file = get_log_path(profile)
     start_ts = time.time()
 
+    try:
+        _run(profile, log_file, start_ts)
+    except Exception as exc:
+        write_failure_status(profile, exc, time.time() - start_ts, log_file)
+        raise
+
+
+def _run(profile: str, log_file: Path, start_ts: float):
     log_line(log_file, "=" * 60)
     log_line(log_file, f"RUN START — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log_line(log_file, f"Profile: {profile}")

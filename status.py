@@ -1,4 +1,5 @@
 import json
+import traceback
 from datetime import datetime, UTC
 from pathlib import Path
 
@@ -59,3 +60,38 @@ def write_status(profile: str, data: dict) -> None:
         json.dumps(status, indent=2),
         encoding="utf-8",
     )
+
+
+def write_failure_status(
+    profile: str,
+    error: BaseException,
+    duration_seconds: float,
+    log_file: Path | None = None,
+) -> None:
+    """
+    Record a run that died on an unhandled exception.
+
+    Both runners only wrote status on their success paths, so a crash (expired
+    StoryGraph session, Playwright timeout, Audible CLI failure) left the status
+    file frozen at the last good run while the traceback went to cron's
+    discarded stderr — a broken sync looked exactly like one that hadn't run
+    yet. This writes status "failed" plus the error, and appends the full
+    traceback to the run log.
+    """
+    detail = f"{type(error).__name__}: {error}".strip()
+    summary = detail.splitlines()[0][:300] if detail else type(error).__name__
+
+    if log_file is not None:
+        tb = "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        )
+        with log_file.open("a", encoding="utf-8") as f:
+            f.write(f"\nRUN FAILED — {summary}\n")
+            f.write(tb)
+            f.write(f"RUN END — duration: {duration_seconds:.1f}s (failed)\n\n")
+
+    write_status(profile, {
+        "status": "failed",
+        "duration_seconds": round(duration_seconds, 1),
+        "error": summary,
+    })

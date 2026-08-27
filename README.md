@@ -156,6 +156,16 @@ Each run includes:
 - Skipped entries (with reasons)
 - Runtime duration
 
+| Log | Contents |
+|-----|----------|
+| `logs/goodreads/{profile}.log` | Goodreads run log; on a crash, `RUN FAILED` + full traceback |
+| `logs/runner/{profile}.log` | Audible run log; on a crash, `RUN FAILED` + full traceback |
+| `logs/cron/{service}.log` | Raw container stdout/stderr per cron run, plus exit code |
+
+A crashed run writes `"status": "failed"` and the error message into
+`status/status.json`, so a broken sync is visible there rather than looking like
+a run that simply hasn't happened yet.
+
 ---
 
 ## Notes & Limitations
