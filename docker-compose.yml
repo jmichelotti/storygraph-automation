@@ -9,6 +9,7 @@ services:
       - ./goodreads/state:/app/goodreads/state
       - ./storygraph/state:/app/storygraph/state
       - ./status:/app/status
+      - ./exports:/app/exports   # To-Read export for book-events; Kim only
 
   audible-justin:
     build: .
@@ -34,6 +35,7 @@ services:
       - ./goodreads/state:/app/goodreads/state
       - ./storygraph/state:/app/storygraph/state
       - ./status:/app/status
+      - ./exports:/app/exports   # To-Read export for book-events; Kim only
     environment:
       ENABLE_VNC: "1"
     ports:

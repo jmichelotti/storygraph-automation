@@ -1,3 +1,4 @@
+import os
 import time
 from pathlib import Path
 from playwright.sync_api import (
@@ -18,6 +19,9 @@ def get_state_file(profile: str) -> Path:
 
 def get_browser(playwright, profile: str, headless=False):
     state = get_state_file(profile)
+    if state.exists():
+        # A saved session is a login: owner-only, like profiles/ (it was 0644 until 2026-10-19).
+        os.chmod(state, 0o600)
 
     browser = playwright.chromium.launch(headless=headless)
 
@@ -102,4 +106,5 @@ def ensure_logged_in(page, context, profile: str):
 
     # 7️⃣ Persist session
     context.storage_state(path=get_state_file(profile))
+    os.chmod(get_state_file(profile), 0o600)
     print("GOOD! Logged in and saved Goodreads session state")

@@ -1,3 +1,4 @@
+import os
 import re
 from contextlib import contextmanager
 from pathlib import Path
@@ -115,6 +116,8 @@ def storygraph_session(profile: str, headless: bool = False):
 
         if storage_state_path:
             context.storage_state(path=storage_state_path)
+            # A saved session is a login: owner-only, like profiles/ (it was 0644 until 2026-10-19).
+            os.chmod(storage_state_path, 0o600)
 
         try:
             yield page

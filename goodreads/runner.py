@@ -9,6 +9,7 @@ from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
 
 from storygraph.runner_api import update_books_read
+from storygraph.to_read_export import export_to_read
 from status import write_status, write_failure_status
 
 
@@ -78,6 +79,14 @@ def run(
     except Exception as exc:
         write_failure_status(profile, exc, time.time() - start_ts, log_file)
         raise
+
+    # Once a day, after a successful sync: the To-Read Pile for book-events. It never raises,
+    # and it runs only where exports/ is mounted (goodreads-kim).
+    if not dry_run and not seed_before:
+        try:
+            export_to_read(profile, headless=headless, log=lambda m: (print(m), log_line(log_file, m)))
+        except Exception as exc:  # belt and braces: a broken status file must not fail the sync
+            log_line(log_file, f"TO-READ EXPORT — crashed: {type(exc).__name__}: {exc}")
 
 
 def _run(

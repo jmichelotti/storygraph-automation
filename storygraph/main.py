@@ -1,3 +1,4 @@
+import os
 import argparse
 from pathlib import Path
 from typing import List
@@ -104,6 +105,7 @@ def main():
         if storage_state_path:
             print(f" Saving browser state to {storage_state_path.name}")
             context.storage_state(path=storage_state_path)
+            os.chmod(storage_state_path, 0o600)
 
         results = search_books(page, titles, max_results_per_title=args.max_results)
 

@@ -1,6 +1,6 @@
 import json
 import traceback
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 STATUS_FILE = Path("status/status.json")
@@ -14,13 +14,11 @@ CRON_SCHEDULES = {
 def _next_run(cron: str, now: datetime) -> str:
     """Compute next run time for the two known cron schedules."""
     if cron == "0 * * * *":
+        # timedelta, not replace(hour=hour + 1): that raised "hour must be in 0..23" at 23:xx UTC
+        # and failed the 16:00 PDT run every day (103 crashes in logs/cron by 2026-10-19).
         candidate = now.replace(minute=0, second=0, microsecond=0)
         if candidate <= now:
-            candidate = candidate.replace(hour=candidate.hour + 1)
-            if candidate.hour == 0:
-                candidate = candidate.replace(
-                    day=candidate.day + 1, hour=0
-                )
+            candidate += timedelta(hours=1)
         return candidate.isoformat()
 
     if cron == "55 11,23 * * *":
@@ -30,7 +28,7 @@ def _next_run(cron: str, now: datetime) -> str:
             return today_1155.isoformat()
         if now < today_2355:
             return today_2355.isoformat()
-        tomorrow = now.replace(day=now.day + 1, hour=11, minute=55, second=0, microsecond=0)
+        tomorrow = (now + timedelta(days=1)).replace(hour=11, minute=55, second=0, microsecond=0)
         return tomorrow.isoformat()
 
     return ""
@@ -48,6 +46,9 @@ def write_status(profile: str, data: dict) -> None:
 
     status = _load()
     cron = CRON_SCHEDULES.get(profile, "")
+    # The To-Read export keeps its own block inside the profile; a sync's status write must not
+    # wipe it, or the export's once-a-day clock would reset every hour.
+    export_block = (status.get(profile) or {}).get(EXPORT_KEY)
 
     status[profile] = {
         **data,
@@ -55,11 +56,28 @@ def write_status(profile: str, data: dict) -> None:
         "cron_schedule": cron,
         "next_run": _next_run(cron, now),
     }
+    if export_block is not None:
+        status[profile][EXPORT_KEY] = export_block
 
     STATUS_FILE.write_text(
         json.dumps(status, indent=2),
         encoding="utf-8",
     )
+
+
+EXPORT_KEY = "to_read_export"
+
+
+def read_export_status(profile: str) -> dict:
+    return dict((_load().get(profile) or {}).get(EXPORT_KEY) or {})
+
+
+def write_export_status(profile: str, block: dict) -> None:
+    """Record the To-Read export's outcome without touching the sync's own status fields."""
+    STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    status = _load()
+    status.setdefault(profile, {})[EXPORT_KEY] = block
+    STATUS_FILE.write_text(json.dumps(status, indent=2), encoding="utf-8")
 
 
 def write_failure_status(

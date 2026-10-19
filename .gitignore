@@ -40,3 +40,6 @@ audible-config/
 
 # Playwright MCP browser artifacts (snapshots, screenshots, console logs)
 .playwright-mcp/
+
+# To-Read export for book-events (personal data; written at runtime)
+exports/

@@ -17,6 +17,11 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Profile-scoped state prevents duplicate uploads
 - Seed mode allows bootstrapping historical reads without touching StoryGraph
 
+### StoryGraph To-Read export (for book-events)
+- Once a day, after Kim's sync, reads her StoryGraph To-Read Pile (read-only) and writes `exports/kim-to-read.json`
+- Publishes only a provably complete list (end of list reached, count matches the page); otherwise keeps the last good file
+- Never fails the sync; outcome in `status.json` under `kim.to_read_export`
+
 ### Audible -> StoryGraph
 - Syncs **in-progress audiobook progress**
 - Detects:
