@@ -26,7 +26,7 @@ class Row:
     author: str
     date_read: str | None
     date_started: str | None
-    rating: int | None
+    rating: float | None
     pages: int | None
     cover_url: str | None
 
@@ -99,10 +99,6 @@ def check_complete(pages: list[list[Row]], cutoff: date, printed_count: int | No
     return False, "short"
 
 
-# Goodreads' own words for each star count, as its rating widgets title them.
-_RATING_WORDS = {"did not like it": 1, "it was ok": 2, "liked it": 3, "really liked it": 4, "it was amazing": 5}
-
-
 def normalize_author(raw: str | None) -> str:
     """List view writes "Last, First" and marks Goodreads authors with a trailing "*"."""
     name = re.sub(r"\s*\*\s*$", "", (raw or "").strip())
@@ -113,11 +109,18 @@ def normalize_author(raw: str | None) -> str:
     return name
 
 
-def parse_rating(title_text: str | None, filled: int | None) -> int | None:
-    """The reader's own star rating from the rating cell: its title words, else its filled stars."""
-    words = (title_text or "").strip().lower()
-    if words in _RATING_WORDS:
-        return _RATING_WORDS[words]
-    if isinstance(filled, int) and 1 <= filled <= 5:
-        return filled
-    return None
+def parse_rating(data_rating: str | None) -> float | None:
+    """The reader's own rating from the stars widget's data-rating ("4.0", "3.5"; probed 2026-11-07).
+
+    Every star link carries a title ("did not like it" ... "it was amazing") whether or not it is
+    filled, so the titles say nothing about the rating. No attribute (a pre-release edition) or 0
+    means unrated.
+    """
+    try:
+        value = float(str(data_rating).strip())
+    except (TypeError, ValueError):
+        return None
+    if not 0.5 <= value <= 5.0:
+        return None
+    return round(value * 2) / 2
+

@@ -43,7 +43,7 @@ _ROWS_JS = """() => {
   const txt = (el) => el ? el.innerText.replace(/\\s+/g, ' ').trim() : '';
   const rows = [...document.querySelectorAll('tr.bookalike.review')].map((tr) => {
     const a = tr.querySelector('td.field.title a');
-    const stars = tr.querySelector('td.field.rating .staticStars, td.field.rating [title]');
+    const stars = tr.querySelector('td.field.rating div.stars');
     const img = tr.querySelector('td.field.cover img');
     return {
       review_id: tr.id || '', href: a ? a.getAttribute('href') : '', title: a ? txt(a) : '',
@@ -51,8 +51,7 @@ _ROWS_JS = """() => {
       date_read: txt(tr.querySelector('td.field.date_read .value')),
       date_started: txt(tr.querySelector('td.field.date_started .value')),
       pages: txt(tr.querySelector('td.field.num_pages .value')),
-      rating_title: stars ? (stars.getAttribute('title') || '') : '',
-      rating_filled: tr.querySelectorAll('td.field.rating .staticStar.p10').length,
+      rating: stars ? stars.getAttribute('data-rating') : null,
       cover: img ? img.getAttribute('src') : '',
     };
   });
@@ -60,9 +59,10 @@ _ROWS_JS = """() => {
   return {rows, printed: shelf ? shelf.innerText : '', has_next: !!document.querySelector('a.next_page')};
 }"""
 
-# Genre names from a book page: every link into /genres/, in page order. Both Goodreads page
-# designs link genres that way, so this does not depend on one layout's class names.
-_GENRES_JS = """() => [...document.querySelectorAll('a[href*="/genres/"]')]
+# Genre names from a book page: the links in the book's own genre list ([data-testid=genresList],
+# probed 2026-11-07), never the header's Browse menu, which links into /genres/ too (horror,
+# literary fiction, nonfiction) on every page. a.bookPageGenreLink is the older page design.
+_GENRES_JS = """() => [...document.querySelectorAll('[data-testid="genresList"] a[href*="/genres/"], a.bookPageGenreLink')]
   .map((a) => a.innerText.replace(/\\s+/g, ' ').trim()).filter((t) => t)"""
 
 
@@ -135,7 +135,7 @@ def _to_row(raw: dict) -> Row | None:
     return Row(gr_book_id=m.group(1), review_id=(raw.get("review_id") or "").replace("review_", ""),
                title_full=raw.get("title") or "", author=normalize_author(raw.get("author")),
                date_read=raw.get("date_read"), date_started=raw.get("date_started"),
-               rating=parse_rating(raw.get("rating_title"), raw.get("rating_filled")),
+               rating=parse_rating(raw.get("rating")),
                pages=parse_pages(raw.get("pages")), cover_url=raw.get("cover") or None)
 
 

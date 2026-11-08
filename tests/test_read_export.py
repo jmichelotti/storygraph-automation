@@ -17,11 +17,11 @@ NOW = datetime(2026, 11, 8, 21, 5, tzinfo=PT)        # Sunday 21:05 PST = Monday
 # This week's anchor is Mon 2026-11-09 00:00 ET; the card's week is Nov 2-8; cutoff = Oct 19.
 
 
-def gr_row(book_id, date_read, title=None, date_started="not set", pages="300 pp", rating_title="it was amazing"):
+def gr_row(book_id, date_read, title=None, date_started="not set", pages="300 pp", rating="5.0"):
     return {"review_id": "review_" + book_id, "href": f"/book/show/{book_id}-slug",
             "title": title or f"Book {book_id}", "author": "Example, Jordan *",
             "date_read": date_read + " [edit]", "date_started": date_started, "pages": pages,
-            "rating_title": rating_title, "rating_filled": 5,
+            "rating": rating,
             "cover": f"https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/{book_id}._SY75_.jpg"}
 
 
@@ -174,7 +174,20 @@ def test_normalize_author():
 
 
 def test_parse_rating():
-    assert parse_rating("really liked it", 4) == 4
-    assert parse_rating("", 3) == 3
-    assert parse_rating("", 0) is None
-    assert parse_rating(None, None) is None
+    # Goodreads' stars widget carries the reader's rating as data-rating, in half-star steps
+    # (probed 2026-11-07). A pre-release edition has no data-rating, and 0 means unrated.
+    assert parse_rating("4.0") == 4.0
+    assert parse_rating("3.5") == 3.5
+    assert parse_rating("0.0") is None
+    assert parse_rating("") is None
+    assert parse_rating(None) is None
+    assert parse_rating("7.0") is None
+    assert parse_rating("lots") is None
+
+
+def test_half_star_and_unrated_rows(workdir):
+    rows = {"rows": [gr_row("41", "Nov 05, 2026", rating="3.5"), gr_row("42", "Nov 02, 2026", rating=None),
+                     gr_row("43", "Oct 01, 2026")], "printed": "Read (1369)", "has_next": True}
+    run(FakePage(rows))
+    books = {b["gr_book_id"]: b for b in published(workdir)["books"]}
+    assert books["41"]["rating"] == 3.5 and books["42"]["rating"] is None
