@@ -17,6 +17,11 @@ A Python automation tool that syncs reading and listening activity from **Goodre
 - Profile-scoped state prevents duplicate uploads
 - Seed mode allows bootstrapping historical reads without touching StoryGraph
 
+### Goodreads read export (for reading-cards)
+- During Kim's hourly sync, reads her Goodreads read shelf (read-only) and writes `exports/kim-read.json`: the books she finished in the last three weeks or more, with series, pages, rating, dates, cover and genres
+- Due once a week after Monday 00:00 Eastern and otherwise daily; at most 10 Goodreads page loads per export
+- Publishes only a provably complete window; otherwise keeps the last good file. Never fails the sync; outcome in `status.json` under `kim.read_export`
+
 ### StoryGraph To-Read export (for book-events)
 - Once a day, after Kim's sync, reads her StoryGraph To-Read Pile (read-only) and writes `exports/kim-to-read.json`
 - Publishes only a provably complete list (end of list reached, count matches the page); otherwise keeps the last good file

@@ -7,6 +7,7 @@ import time
 from goodreads.auth import get_browser, ensure_logged_in
 from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
+from goodreads.read_export import export_read
 
 from storygraph.runner_api import update_books_read
 from storygraph.to_read_export import export_to_read
@@ -132,6 +133,11 @@ def _run(
             goodreads_books = fetch_read_books(page)
             print(f"Found {len(goodreads_books)} read books")
             log_line(log_file, f"Found {len(goodreads_books)} read books")
+
+            # Kim's finished books for reading-cards, while the read shelf is still the open page
+            # (before the loop below moves to review pages). Read-only; never raises.
+            if not dry_run and not seed_before:
+                export_read(profile, page, log=lambda m: (print(m), log_line(log_file, m)))
 
             for book in goodreads_books:
                 if book.review_id in processed:

@@ -46,9 +46,10 @@ def write_status(profile: str, data: dict) -> None:
 
     status = _load()
     cron = CRON_SCHEDULES.get(profile, "")
-    # The To-Read export keeps its own block inside the profile; a sync's status write must not
-    # wipe it, or the export's once-a-day clock would reset every hour.
-    export_block = (status.get(profile) or {}).get(EXPORT_KEY)
+    # Each export keeps its own block inside the profile; a sync's status write must not wipe
+    # them, or the exports' clocks would reset every hour.
+    previous = status.get(profile) or {}
+    export_blocks = {key: previous[key] for key in EXPORT_KEYS if previous.get(key) is not None}
 
     status[profile] = {
         **data,
@@ -56,8 +57,7 @@ def write_status(profile: str, data: dict) -> None:
         "cron_schedule": cron,
         "next_run": _next_run(cron, now),
     }
-    if export_block is not None:
-        status[profile][EXPORT_KEY] = export_block
+    status[profile].update(export_blocks)
 
     STATUS_FILE.write_text(
         json.dumps(status, indent=2),
@@ -66,18 +66,29 @@ def write_status(profile: str, data: dict) -> None:
 
 
 EXPORT_KEY = "to_read_export"
+# Blocks a sync's own status write carries over: the To-Read export (book-events) and, since
+# 2026-11-07, the read export (reading-cards round table, A2).
+EXPORT_KEYS = (EXPORT_KEY, "read_export")
+
+
+def read_export_block(profile: str, key: str) -> dict:
+    return dict((_load().get(profile) or {}).get(key) or {})
+
+
+def write_export_block(profile: str, key: str, block: dict) -> None:
+    """Record one export's outcome without touching the sync's own status fields."""
+    STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    status = _load()
+    status.setdefault(profile, {})[key] = block
+    STATUS_FILE.write_text(json.dumps(status, indent=2), encoding="utf-8")
 
 
 def read_export_status(profile: str) -> dict:
-    return dict((_load().get(profile) or {}).get(EXPORT_KEY) or {})
+    return read_export_block(profile, EXPORT_KEY)
 
 
 def write_export_status(profile: str, block: dict) -> None:
-    """Record the To-Read export's outcome without touching the sync's own status fields."""
-    STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    status = _load()
-    status.setdefault(profile, {})[EXPORT_KEY] = block
-    STATUS_FILE.write_text(json.dumps(status, indent=2), encoding="utf-8")
+    write_export_block(profile, EXPORT_KEY, block)
 
 
 def write_failure_status(
