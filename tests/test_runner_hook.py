@@ -42,6 +42,7 @@ def wired(monkeypatch, tmp_path):
         return {"title": "T", "author": "A", "date_started": None, "date_read": None}
     monkeypatch.setattr(runner, "fetch_review_details", details)
     monkeypatch.setattr(runner, "export_read", lambda profile, page, log: events.append("read-export") or {})
+    monkeypatch.setattr(runner, "export_read_all", lambda profile, page, log: events.append("read-all-export") or {})
     monkeypatch.setattr(runner, "write_status", lambda *a, **k: None)
     return events
 
@@ -54,3 +55,13 @@ def test_export_runs_after_list_and_before_review_pages(wired):
 def test_export_skipped_on_dry_run_and_seed(wired):
     runner._run(profile="kim", dry_run=True)
     assert "read-export" not in wired
+
+
+def test_read_all_export_runs_after_review_pages_before_browser_closes(wired):
+    runner._run(profile="kim", dry_run=False)
+    assert wired.index("review-page") < wired.index("read-all-export") < wired.index("close")
+
+
+def test_read_all_export_skipped_on_dry_run(wired):
+    runner._run(profile="kim", dry_run=True)
+    assert "read-all-export" not in wired

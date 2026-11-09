@@ -8,6 +8,7 @@ from goodreads.auth import get_browser, ensure_logged_in
 from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
 from goodreads.read_export import export_read
+from goodreads.read_all_export import export_read_all
 
 from storygraph.runner_api import update_books_read
 from storygraph.to_read_export import export_to_read
@@ -215,6 +216,11 @@ def _run(
                     log_file,
                     f"  start={details['date_started']} finish={finished}",
                 )
+
+            # Once a month: Kim's whole read shelf for book-events' "top" authors (task 187), after
+            # the sync's own Goodreads pages, in the same signed-in browser. Never raises.
+            if not dry_run and not seed_before:
+                export_read_all(profile, page, log=lambda m: (print(m), log_line(log_file, m)))
         finally:
             context.close()
             browser.close()

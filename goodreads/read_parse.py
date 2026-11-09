@@ -124,3 +124,86 @@ def parse_rating(data_rating: str | None) -> float | None:
         return None
     return round(value * 2) / 2
 
+
+
+# ----------------------------------------------------------------------------
+# Whole read shelf (goodreads-read-all/1, Vikunja task 187)
+# ----------------------------------------------------------------------------
+
+PER_PAGE = 100   # the list view's ceiling: per_page=200 still serves 100 rows (probed 2026-11-08)
+
+
+@dataclass(frozen=True)
+class ShelfRow:
+    """One read-shelf row for the whole-shelf export. `dates` holds one text per reading session."""
+    gr_book_id: str
+    review_id: str
+    title: str
+    author: str
+    author_id: str | None
+    rating: float | None
+    dates: tuple[str, ...]
+    read_count: int | None
+
+
+def newest_read(dates) -> tuple[str | None, bool]:
+    """(newest full read date as ISO, every date recognised?). A re-read has one date per session."""
+    best = None
+    for text in dates:
+        iso, kind = parse_gr_date(text)
+        if kind == "unparsed":
+            return None, False
+        if iso and (best is None or iso > best):
+            best = iso
+    return best, True
+
+
+def parse_count(text: str | None) -> int | None:
+    m = re.search(r"\d+", _clean(text))
+    return int(m.group(0)) if m else None
+
+
+def check_whole_shelf(pages: list[list[ShelfRow]], printed: list[int | None],
+                      last_has_next: bool) -> tuple[bool, str]:
+    """Is this page-by-page walk provably the whole read shelf? (ok, reason)
+
+    `printed` is the shelf count each page printed. Any page that shows a different count, a short
+    page before the last, a duplicate review, or a row the list view did not fill in means the
+    shelf moved or rendered differently mid-walk, so the walk is not trusted.
+    """
+    if not pages or not printed or any(p is None for p in printed):
+        return False, "no-count"
+    total = printed[0]
+    if any(p != total for p in printed):
+        return False, "count-changed"
+    if last_has_next:
+        return False, "more-pages"
+    expected_pages = max(1, -(-total // PER_PAGE))
+    if len(pages) != expected_pages:
+        return False, "page-count"
+    for i, page in enumerate(pages):
+        want = PER_PAGE if i < expected_pages - 1 else total - PER_PAGE * (expected_pages - 1)
+        if len(page) != want:
+            return False, f"page-{i + 1}-rows"
+    rows = [r for page in pages for r in page]
+    if len({r.review_id for r in rows}) != total or len({r.gr_book_id for r in rows}) != total:
+        return False, "duplicates"
+    for r in rows:
+        if not r.gr_book_id or not r.review_id or not r.author:
+            return False, "blank-row"
+        if not newest_read(r.dates)[1]:
+            return False, "unparsed-date"
+    return True, "ok"
+
+
+def unparsed_dates(pages: list[list[ShelfRow]], limit: int = 10) -> list[str]:
+    """Every distinct date text not in a recognised form, as "p<page>: <text>", for the log."""
+    seen: list[str] = []
+    for i, page in enumerate(pages):
+        for r in page:
+            for text in r.dates:
+                if parse_gr_date(text)[1] == "unparsed":
+                    entry = f"p{i + 1}: {_clean(text)[:60]!r}"
+                    if entry not in seen and len(seen) < limit:
+                        seen.append(entry)
+    return seen

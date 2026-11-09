@@ -68,7 +68,7 @@ def write_status(profile: str, data: dict) -> None:
 EXPORT_KEY = "to_read_export"
 # Blocks a sync's own status write carries over: the To-Read export (book-events) and, since
 # 2026-11-07, the read export (reading-cards round table, A2).
-EXPORT_KEYS = (EXPORT_KEY, "read_export")
+EXPORT_KEYS = (EXPORT_KEY, "read_export", "read_all_export")
 
 
 def read_export_block(profile: str, key: str) -> dict:
