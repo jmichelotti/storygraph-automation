@@ -4,17 +4,44 @@ Vikunja task 187 (2026-11-08). Goodreads closed per-shelf RSS around 2026-11-02,
 ranked "top" authors (her most-finished authors, which aim its search tier) could no longer
 refresh. book-events' import-watchlist.py reads this file (--goodreads-read-all) and rebuilds "top".
 
-Operator rulings, 2026-11-08: walk the list view (read-only; not the Export Library button, which
-is an action on her account, and not StoryGraph, whose ratings this repo never writes); monthly,
-or by hand with --force.
+Operator rulings, 2026-11-08: walk the list view, which is read-only. Not the Export Library
+button on /review/import, which is an action on her account. Not StoryGraph /books-read, which
+prints 1,379 books against Goodreads' 1,369, loads 10 per scroll, and carries ratings this repo
+never writes; the 10-book gap is left alone. Run monthly, or by hand with --force.
 
-It runs inside the hourly sync's own signed-in Goodreads browser, after the sync's own Goodreads
-work, on --apply runs only. The list view serves at most 100 rows a page (per_page=200 still
-serves 100; probed 2026-11-08), so 1,369 books is 14 pages of about 870 KB each. Every navigation
-goes through read_export.Budget: at most ceil(count / 100) + 2, never more than MAX_NAV, at least
-MIN_GAP_S apart. Published only if read_parse.check_whole_shelf proves the walk is the whole shelf;
-anything else keeps the last good file. Read-only on Goodreads, never touches StoryGraph, and
-never raises into the sync.
+When: inside the hourly sync's own signed-in Goodreads browser, in goodreads/runner.py _run,
+after the sync's own Goodreads loop, on --apply runs only. Due when the newest success is over
+28 days old (INTERVAL). After a failure it waits COOLDOWN (3 h), or LONG_COOLDOWN (24 h) after
+LONG_AFTER (3) failures in a row (status field consecutive_failures).
+
+Page facts, probed 2026-11-08:
+- The list view serves 100 rows a page at most (per_page=200 still serves 100). Each page is
+  about 870 KB and takes 8-11 s, so 1,369 books is 14 pages and about 3 minutes.
+- A page past the end returns HTTP 200 with zero rows.
+- Each reading session is a div.date_row holding a span.date_read_value. A re-read with no dates
+  has two date_rows and no span; reading the whole cell gave "not set not set" and refused two
+  walks, so dates are read row by row. Old imports sort last, with "not set".
+- Page 14 of 14 timed out at 60 s after three walks in half an hour, so each page is retried
+  once, RETRY_WAIT_S later, inside the same budget.
+
+Budget: every navigation goes through read_export.Budget, at least MIN_GAP_S (6 s) apart, at most
+ceil(count / 100) + 2 and never more than MAX_NAV (25, i.e. 2,400 books; a bigger shelf fails
+loudly).
+
+Published (goodreads-read-all/1; see build_payload) only if read_parse.check_whole_shelf passes:
+- every page prints the same count;
+- every page but the last has exactly 100 rows, and the last has the rest with no a.next_page;
+- review ids and book ids are unique and equal the count;
+- no blank book id or author;
+- every date text is recognised. Unrecognised ones are listed in the status block's
+  unparsed_dates.
+Anything else keeps the last good file. The author is the primary author only, as the list view
+shows. date_read is the newest dated session, and rating is null when unrated. File rules are the
+other exports' rules: 0600, .new then rename, chowned to the owner of exports/.
+
+Read-only on Goodreads, never touches StoryGraph, and never raises into the sync. The outcome
+goes in status.json as <profile>.read_all_export, which write_status carries over
+(status.EXPORT_KEYS).
 """
 from __future__ import annotations
 
