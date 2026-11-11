@@ -71,6 +71,42 @@ def _token_candidates(
     return candidates
 
 
+# An author-less record is accepted on its title alone, so the title has to say enough on its own:
+# 'Seven Men for Seven Friends' (5 words) yes, 'Home' or 'The Fall' no.
+AUTHORLESS_MIN_TITLE_TOKENS = 3
+
+
+def _authorless_exact_title(
+    results: list[BookSearchResult],
+    expected_title: str,
+) -> Optional[BookSearchResult]:
+    """
+    The one author-less record whose title is exactly the expected one, or None.
+
+    StoryGraph has records with no author at all: 'Seven Men for Seven Friends' by Elizabeth
+    Manriquez is one (probed 2026-11-10: blank author line, cover alt "… by ", 1 digital edition,
+    not flagged user-added), and the strict author check can never accept it, so the book was
+    retried and skipped every hour from 2026-09-09 (task 182). Accepted only when it is the sole
+    record with that exact title among the results: any authored record with the same title means
+    there is a real book by a named author, and this one may not be ours.
+    """
+    expected = normalize(expected_title)
+    if len(expected.split()) < AUTHORLESS_MIN_TITLE_TOKENS:
+        return None
+
+    exact: dict[str, BookSearchResult] = {}
+    for r in results:
+        if r.title and normalize(r.title) == expected:
+            exact.setdefault(r.url, r)
+
+    if len(exact) != 1:
+        return None
+    (only,) = exact.values()
+    if only.author and only.author.strip():
+        return None
+    return only
+
+
 def find_matching_book(
     results: list[BookSearchResult],
     expected_title: str,
@@ -80,11 +116,19 @@ def find_matching_book(
     STRICT matching:
     - Title must share tokens
     - Author MUST match if provided
-    - No title-only fallback when author is present
+    - No title-only fallback when author is present, except for a record that
+      has no author at all (see _authorless_exact_title)
     """
     candidates = _token_candidates(results, expected_title, expected_author)
 
     if not candidates:
+        authorless = _authorless_exact_title(results, expected_title)
+        if authorless:
+            print(
+                f"INFO! Accepted author-less StoryGraph record by exact title -> "
+                f"{authorless.title} ({authorless.url})"
+            )
+            return authorless
         print(
             f"WARNING! No confident StoryGraph match for "
             f"'{expected_title}' by '{expected_author}'"

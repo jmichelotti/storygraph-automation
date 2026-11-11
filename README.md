@@ -174,7 +174,10 @@ Each run includes:
 
 A crashed run writes `"status": "failed"` and the error message into
 `status/status.json`, so a broken sync is visible there rather than looking like
-a run that simply hasn't happened yet.
+a run that simply hasn't happened yet. A book that keeps failing to sync (for
+example, no StoryGraph match) is retried every run and listed under
+`kim.books_not_synced` with its attempt count and first failure, so a stuck book
+shows even when the run itself succeeds.
 
 ---
 

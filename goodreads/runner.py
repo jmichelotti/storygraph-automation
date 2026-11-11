@@ -9,6 +9,7 @@ from goodreads.library import fetch_read_books
 from goodreads.book_details import fetch_review_details
 from goodreads.read_export import export_read
 from goodreads.read_all_export import export_read_all
+from goodreads.unsynced import track_unsynced, status_list
 
 from storygraph.runner_api import update_books_read
 from storygraph.to_read_export import export_to_read
@@ -270,12 +271,15 @@ def _run(
             "duration_seconds": round(duration, 1),
             "books_synced_total": len(processed),
             "books_pending": len(updates),
+            "books_not_synced": status_list(state.get("unsynced")),
         })
         return
 
     if not updates:
         print("\nNo new Goodreads books to sync.")
         log_line(log_file, "No new Goodreads books to sync.")
+        if state.pop("unsynced", None):
+            save_state(profile, state)
 
         duration = time.time() - start_ts
         log_line(log_file)
@@ -286,6 +290,7 @@ def _run(
             "duration_seconds": round(duration, 1),
             "books_synced_total": len(processed),
             "books_synced_this_run": 0,
+            "books_not_synced": [],
         })
         return
 
@@ -302,14 +307,26 @@ def _run(
     )
 
     # ---------- Persist state ----------
+    unsynced = track_unsynced(
+        state.get("unsynced") or {}, updates, applied_ids, datetime.now().astimezone().isoformat(),
+    )
     for b in updates:
         if b["review_id"] in applied_ids:
             processed.add(b["review_id"])
             log_line(log_file, f"  ACTION: applied -> {b['title']}")
         else:
-            log_line(log_file, f"  WARNING: skipped (no StoryGraph match) -> {b['title']}")
+            entry = unsynced[b["review_id"]]
+            log_line(
+                log_file,
+                f"  WARNING: skipped (no StoryGraph match) -> {b['title']} "
+                f"(attempt {entry['attempts']} since {entry['first_failed'][:10]})",
+            )
 
     state["processed_reviews"] = sorted(processed)
+    if unsynced:
+        state["unsynced"] = unsynced
+    else:
+        state.pop("unsynced", None)
     save_state(profile, state)
 
     print("\nGOOD! Goodreads sync complete and state updated")
@@ -325,4 +342,5 @@ def _run(
         "duration_seconds": round(duration, 1),
         "books_synced_total": len(processed),
         "books_synced_this_run": len(applied_ids),
+        "books_not_synced": status_list(unsynced),
     })
